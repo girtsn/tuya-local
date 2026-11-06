@@ -1,8 +1,8 @@
-# Vipera / HeatQ NEX HOME towel dryer, custom Tuya Local profile v0.7.
+# Vipera / HeatQ NEX HOME towel dryer, custom Tuya Local profile v0.8.
 # Schedule-reserved standby value: DP2=30 ONLY IF DP4=week_program.
 # Outside Schedule mode, 30C remains a normal target (if DP1 is on).
 # This inference requires all three dryers' schedules to avoid 30C slots.
-# For schedule editing, use v0.7 schedule card (31..60C or OFF).
+# For schedule editing, use v0.9 schedule card (31..60C or OFF).
 # Firmware setpoint 30C while idle has been observed, not vendor documented.
 # Binary 'Heating requested' is NOT a direct electrical consumption meter.
 # Climate 'temperature' maps to null only when Schedule mode and DP2 is 30C;
@@ -215,12 +215,13 @@ entities:
       max: 5
 - entity: sensor
   name: Estimated energy
+  class: energy
   dps:
   - id: 102
     name: sensor
     type: integer
     unit: kWh
-    class: measurement
+    class: total_increasing
     mapping:
     - scale: 100
 - entity: number
