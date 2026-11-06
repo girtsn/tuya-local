@@ -1,3 +1,16 @@
+> **Girtsn fork — Tuya Local 2026.10.2.** This fork includes
+> [Vipera NEX HOME towel dryer support, the Energy dashboard fix, and a
+> bundled schedule card served directly by the integration](docs/vipera-nex-home.md).
+> To install or update this fork, add
+> `https://github.com/girtsn/tuya-local` as a **custom Integration**
+> repository in HACS / Home Assistant Marketplace.
+> **Do not delete your existing Tuya Local device configuration when
+> changing package sources.** You cannot install two `tuya_local`
+> integration packages side by side.
+>
+> The original integration is maintained by
+> [make-all/tuya-local](https://github.com/make-all/tuya-local).
+
 ![logo](custom_components/tuya_local/brand/icon.svg) 
 
 Please report any [issues](https://github.com/make-all/tuya-local/issues) and feel free to raise [pull requests](https://github.com/make-all/tuya-local/pulls).
@@ -39,7 +52,7 @@ follow the [instructions for adding a custom
 repository](https://hacs.xyz/docs/faq/custom_repositories) and then
 the integration will be available to install like any other.
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=make-all&repository=tuya-local&category=integration)
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=girtsn&repository=tuya-local&category=integration)
 
 ## Configuration
 
