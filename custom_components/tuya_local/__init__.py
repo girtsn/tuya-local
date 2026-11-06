@@ -31,6 +31,7 @@ from .device import async_delete_device, get_device_id, setup_device
 from .discovery import async_start_discovery, async_stop_discovery
 from .helpers.device_config import get_config
 from .services import async_setup_services
+from .vipera_frontend import async_register_vipera_card
 
 _LOGGER = logging.getLogger(__name__)
 NOT_FOUND = "Configuration file for %s not found"
@@ -1112,6 +1113,12 @@ async def async_migrate_entry(hass, entry: ConfigEntry):
         await async_migrate_entries(hass, entry.entry_id, update_unique_id13_25)
         hass.config_entries.async_update_entry(entry, minor_version=25)
 
+    return True
+
+
+async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+    """Register a direct URL for the bundled Vipera schedule dashboard card."""
+    await async_register_vipera_card(hass)
     return True
 
 
