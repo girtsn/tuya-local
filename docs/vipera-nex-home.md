@@ -1,7 +1,7 @@
 # Vipera NEX HOME towel dryers — Tuya Local HACS fork (2026.10.2)
 
 This is a fork of [make-all/tuya-local](https://github.com/make-all/tuya-local)
-with the Vipera NEX HOME device profile and the custom 7 x 24-hour schedule
+with stable HACS ZIP releases, the Vipera NEX HOME device profile and the custom 7 x 24-hour schedule
 editor bundled **inside the same HACS integration**.
 
 The source of the card is kept at
@@ -27,8 +27,10 @@ deleted. Both repositories provide the **same integration domain**,
    entries, and avoid restarting between removing the old package and
    installing the new one.
 3. Download/install the new custom repository **girtsn/tuya-local**
-   (default branch `main`); it installs to the existing location
-   `/config/custom_components/tuya_local`.
+   and select the **stable release `v2026.10.2`**, **not `main`**.
+   HACS downloads the small versioned `tuya-local.zip` file rather than
+   fetching the entire source repository. It installs into the existing
+   location `/config/custom_components/tuya_local`.
 4. Restart Home Assistant **once** after the fork is installed. Confirm
    that the `tuya_local` integration loads and the three dryer entities
    retain their names and entity IDs.
@@ -37,7 +39,16 @@ deleted. Both repositories provide the **same integration domain**,
    package for the same directory.
 
 If the repository is already listed as a custom repository, do not create
-another listing for the same fork. Download/update it instead.
+another listing for the same fork. **Refresh/reload the repository in HACS**
+so the latest stable release is visible, then choose `v2026.10.2`.
+If the download progress stalls again, inspect **Settings → System → Logs**
+and HACS logs; the UI alone is insufficient to diagnose a GitHub/network error.
+
+The HACS repository manifest sets `zip_release: true`,
+`filename: tuya-local.zip` and `hide_default_branch: true`.
+The release ZIP contains exactly the integration folder's contents, including
+`www/vipera-schedule-card.js`. A GitHub Actions workflow generates this archive
+from `release/v*` branches and publishes matching stable version tags.
 
 ## Use the dashboard card without any file copying
 

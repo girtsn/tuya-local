@@ -3,7 +3,10 @@
 > bundled schedule card served directly by the integration](docs/vipera-nex-home.md).
 > To install or update this fork, add
 > `https://github.com/girtsn/tuya-local` as a **custom Integration**
-> repository in HACS / Home Assistant Marketplace.
+> repository in HACS / Home Assistant Marketplace, then install the
+> **stable `v2026.10.2` release** distributed as `tuya-local.zip`.
+> Do not install the development `main` branch; this fork hides it
+> from HACS to avoid expensive source-tree downloads.
 > **Do not delete your existing Tuya Local device configuration when
 > changing package sources.** You cannot install two `tuya_local`
 > integration packages side by side.
