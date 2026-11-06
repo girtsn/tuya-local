@@ -317,7 +317,7 @@ class ViperaScheduleCard extends HTMLElement {
   async _resetMeter() {
     const reset=this._current().reset_entity;
     if(!reset)return;
-    if(!confirm(`Reset the estimated energy meter for ${this._current().name}?\nTHIS ERASES THE DEVICE'S ENERGY HISTORY.\nDP 105 reset command is EXPERIMENTAL and has not been write-tested.`)) return;
+    if(!confirm(`Reset the estimated energy meter for ${this._current().name}?\nThis resets the DEVICE counter; HA historical statistics are normally retained.\nDP105 reset is EXPERIMENTAL and has not been write-tested.`)) return;
     try {
       this._busy=true;this._render();
       await this._hass.callService('button','press',{entity_id:reset});
