@@ -12,6 +12,7 @@ _LOGGER = logging.getLogger(__name__)
 WWW = Path(__file__).parent / "www"
 MANIFEST = Path(__file__).parent / "manifest.json"
 PANEL_PATH = "towel-dryers"
+PANEL_REGISTER_ERRORS = (ValueError, RuntimeError)
 PANEL_VERSION = json.loads(MANIFEST.read_text(encoding="utf-8"))["version"]
 VIPERA_CARD_URL = "/tuya_local/vipera-schedule-card.js"
 
@@ -23,7 +24,9 @@ async def async_register_vipera_card(hass: HomeAssistant) -> None:
         [
             # Retained for existing dashboards: no resource or entity migration.
             StaticPathConfig(
-                VIPERA_CARD_URL, str(WWW / "vipera-schedule-card.js"), cache_headers=False
+                VIPERA_CARD_URL,
+                str(WWW / "vipera-schedule-card.js"),
+                cache_headers=False,
             ),
             # The stable loader checks the manifest and swaps to a version-specific
             # custom element, so a HACS upgrade needs no Ctrl+F5.
@@ -68,7 +71,7 @@ async def async_register_towel_dryers_panel(hass: HomeAssistant) -> None:
             module_url="/tuya_local/towel-dryers-loader.js",
             require_admin=False,
         )
-    except (ValueError, RuntimeError):
+    except PANEL_REGISTER_ERRORS:
         _LOGGER.warning(
             "Could not register the Towel Dryers sidebar panel; existing "
             "Tuya Local entities and Lovelace cards are unchanged",
