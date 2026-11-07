@@ -38,7 +38,7 @@ jobs:
           assert hacs["filename"] == "tuya-local.zip"
           assert hacs["hide_default_branch"] is True
           assert Path("custom_components/tuya_local/www/vipera-schedule-card.js").is_file()
-          for asset in ("towel-dryers-loader.js", "towel-dryers-managed-panel.js", "towel-dryers-date-range-picker.js"):
+          for asset in ("towel-dryers-loader.js", "towel-dryers-managed-panel.js", "towel-dryers-date-range-picker.js", "chart-hover-tooltip.js"):
               assert (Path("custom_components/tuya_local/www") / asset).is_file()
           assert Path("custom_components/tuya_local/devices/vipera_nex_home.yaml").is_file()
           print(f"Validating HACS release {tag}")
@@ -53,6 +53,8 @@ jobs:
           done
       - name: Test dashboard hot updates and schedule safeguards
         run: node tests/test_towel_dryers_frontend.cjs
+      - name: Test interactive Recorder tooltip
+        run: node tests/test_chart_hover_tooltip.cjs custom_components/tuya_local/www/chart-hover-tooltip.js
       - name: Validate Python formatting and YAML
         run: |
           uv run ruff check custom_components/tuya_local/__init__.py custom_components/tuya_local/vipera_frontend.py tests/test_vipera_frontend.py
@@ -94,7 +96,7 @@ jobs:
               assert "manifest.json" in names
               assert "devices/vipera_nex_home.yaml" in names
               assert "www/vipera-schedule-card.js" in names
-              for asset in ("towel-dryers-loader.js", "towel-dryers-managed-panel.js", "towel-dryers-date-range-picker.js"):
+              for asset in ("towel-dryers-loader.js", "towel-dryers-managed-panel.js", "towel-dryers-date-range-picker.js", "chart-hover-tooltip.js"):
                   assert f"www/{asset}" in names
               print(f"Built {output}: {len(files)} files, {output.stat().st_size} bytes")
           PY
@@ -119,3 +121,5 @@ jobs:
             Existing tuya_local config entries and schedule cards are preserved.
             Mobile Home Assistant navigation is restored: the Towel Dryers panel
             now offers a hamburger button that opens the native HA sidebar.
+            Hover or tap the historical Towel Dryers charts to inspect date and
+            recorded series values, using a crosshair without filling data gaps.

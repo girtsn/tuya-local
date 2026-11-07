@@ -1,3 +1,4 @@
+import {attachRecorderChartTooltip} from "./chart-hover-tooltip.js";
 /* Integration-managed Towel Dryers dashboard for the Vipera Tuya Local profile.
  * Uses the same tabs and date picker as tado X. No manual Lovelace resources.
  * Versions have separate element names so the loader can hot-swap without reload.
@@ -372,6 +373,10 @@ class TowelDryersManagedPanel extends HTMLElement{
       label.textContent=new Date(t).toLocaleDateString();svg.append(label);
     }
     host.append(svg);
+    attachRecorderChartTooltip(host,svg,
+      graphs.map(s=>({label:s.label,color:s.color,points:s.points})),
+      {start:left,end:right,width:720,height:195,left:50,right:50,
+        top:28,bottom:41,yFor:y,period:this._period(),unit});
     const legend=this._el("div",null,"legend");
     for(const s of graphs){
       const item=this._el("span",s.label+" · "+s.points.length+" points");
