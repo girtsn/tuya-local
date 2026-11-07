@@ -28,5 +28,7 @@ jobs:
           for file in custom_components/tuya_local/www/*.js; do
             node --input-type=module --check < "$file"
           done
+      - name: Test interactive Recorder tooltip
+        run: node tests/test_chart_hover_tooltip.cjs custom_components/tuya_local/www/chart-hover-tooltip.js
       - name: Test hot reload and control safeguards
         run: node tests/test_towel_dryers_frontend.cjs
