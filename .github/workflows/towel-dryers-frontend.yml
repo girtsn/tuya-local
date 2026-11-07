@@ -15,6 +15,8 @@ on:
       - 'custom_components/tuya_local/www/**'
       - 'custom_components/tuya_local/manifest.json'
       - 'tests/test_towel_dryers_frontend.cjs'
+      - 'tests/test_towel_energy_deltas.cjs'
+      - 'tests/test_chart_hover_tooltip.cjs'
       - '.github/workflows/towel-dryers-frontend.yml'
 
 permissions:
