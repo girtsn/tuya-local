@@ -380,12 +380,32 @@ class TowelDryersManagedPanel extends HTMLElement{
     }
     host.append(legend);
   }
+  _mobileMenuButton(){
+    // A custom panel owns its header on narrow screens; HA does not supply one.
+    const button=document.createElement("button");
+    button.type="button";
+    button.className="ha-mobile-menu";
+    button.title="Open Home Assistant menu";
+    button.setAttribute("aria-label","Open Home Assistant menu");
+    const icon=document.createElement("ha-icon");
+    icon.setAttribute("icon","mdi:menu");
+    icon.setAttribute("aria-hidden","true");
+    button.append(icon);
+    button.addEventListener("click",()=>this.dispatchEvent(
+      new Event("hass-toggle-menu",{bubbles:true,composed:true})
+    ));
+    return button;
+  }
   _render(){
     if(!this.isConnected||!this._hass)return;
     const root=this.shadowRoot;root.replaceChildren();this._rendered=false;this._schedule=null;
     const style=this._el("style");style.textContent=[
       ":host{display:block;color:var(--primary-text-color);font:var(--primary-font-family,Roboto,Arial,sans-serif)}",
       "*{box-sizing:border-box}",
+      ".ha-mobile-menu{display:none;align-items:center;justify-content:center;width:40px;height:40px;flex:0 0 40px;padding:8px;border:0;border-radius:50%;background:transparent;color:inherit;cursor:pointer}",
+      ".ha-mobile-menu:focus-visible{outline:2px solid var(--primary-color,#03a9f4);outline-offset:2px}",
+      ".heading-group{display:flex;align-items:center;gap:10px;min-width:0}",
+      "@media(max-width:870px){.ha-mobile-menu{display:inline-flex}}",
       ".shell{max-width:1280px;margin:0 auto;padding:16px 18px 32px}",
       ".title{font-size:24px;font-weight:600;margin:0 0 4px}",
       ".subtitle,.foot,.label{font-size:13px;color:var(--secondary-text-color,#777)}",
@@ -416,7 +436,9 @@ class TowelDryersManagedPanel extends HTMLElement{
       "@media(max-width:650px){.shell{padding:12px}.metrics{gap:10px}}"
     ].join("\n");root.append(style);
     const shell=this._el("main",null,"shell");
-    shell.append(this._el("h1","Towel Dryers","title"));
+    const headingGroup=this._el("div",null,"heading-group");
+    headingGroup.append(this._mobileMenuButton(),this._el("h1","Towel Dryers","title"));
+    shell.append(headingGroup);
     shell.append(this._el("p","Vipera NEX HOME · Tuya Local integration-managed dashboard","subtitle"));
     if(!this._assetsReady){
       const message=this._el("div",this._assetError?
