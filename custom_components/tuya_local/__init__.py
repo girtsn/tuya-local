@@ -9,7 +9,6 @@ https://github.com/codetheweb/tuyapi/issues/31.
 
 import logging
 
-from homeassistant.components import frontend
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant, callback
@@ -33,9 +32,9 @@ from .discovery import async_start_discovery, async_stop_discovery
 from .helpers.device_config import get_config
 from .services import async_setup_services
 from .vipera_frontend import (
-    PANEL_PATH,
     async_register_towel_dryers_panel,
     async_register_vipera_card,
+    async_unregister_towel_dryers_panel,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -1128,6 +1127,11 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
+    # The sidebar is independent of the LAN connection: register it even when
+    # a dryer is temporarily offline and the config entry must be retried.
+    if entry.data.get(CONF_TYPE) == "vipera_nex_home":
+        await async_register_towel_dryers_panel(hass)
+
     device_id = get_device_id(entry.data)
     _LOGGER.debug(
         "Setting up entry for device: %s",
@@ -1164,11 +1168,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 
     await hass.config_entries.async_forward_entry_setups(entry, entities)
     await async_setup_services(hass, entities)
-
-    # Show the Towel Dryers sidebar only for this fork's Vipera profile.
-    # Register a single panel even when all three devices have config entries.
-    if entry.data.get(CONF_TYPE) == "vipera_nex_home":
-        await async_register_towel_dryers_panel(hass)
 
     entry.add_update_listener(async_update_entry)
 
@@ -1217,7 +1216,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
     if entry.data.get(CONF_TYPE) == "vipera_nex_home" and not any(
         e.data.get(CONF_TYPE) == "vipera_nex_home" for e in remaining
     ):
-        frontend.async_remove_panel(hass, PANEL_PATH, warn_if_unknown=False)
+        async_unregister_towel_dryers_panel(hass)
 
     return True
 
