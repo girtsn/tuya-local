@@ -1,4 +1,4 @@
-# Vipera NEX HOME towel dryers — Tuya Local HACS fork (2026.11.2)
+# Vipera NEX HOME towel dryers — Tuya Local HACS fork (2026.11.4)
 
 This is a fork of [make-all/tuya-local](https://github.com/make-all/tuya-local)
 with stable HACS ZIP releases, the Vipera NEX HOME device profile and the custom 7 x 24-hour schedule
@@ -27,7 +27,7 @@ deleted. Both repositories provide the **same integration domain**,
    entries, and avoid restarting between removing the old package and
    installing the new one.
 3. Download/install the new custom repository **girtsn/tuya-local**
-   and select the **stable release `v2026.11.2`**, **not `main`**.
+   and select the **stable release `v2026.11.4`**, **not `main`**.
    HACS downloads the small versioned `tuya-local.zip` file rather than
    fetching the entire source repository. It installs into the existing
    location `/config/custom_components/tuya_local`.
@@ -35,12 +35,12 @@ deleted. Both repositories provide the **same integration domain**,
    that the `tuya_local` integration loads and the three dryer entities
    retain their names and entity IDs.
 5. Confirm the Integration/Marketplace details show fork version
-   `2026.11.2`; ensure HACS/Marketplace no longer manages the upstream
+   `2026.11.4`; ensure HACS/Marketplace no longer manages the upstream
    package for the same directory.
 
 If the repository is already listed as a custom repository, do not create
 another listing for the same fork. **Refresh/reload the repository in HACS**
-so the latest stable release is visible, then choose `v2026.11.2`.
+so the latest stable release is visible, then choose `v2026.11.4`.
 If the download progress stalls again, inspect **Settings → System → Logs**
 and HACS logs; the UI alone is insufficient to diagnose a GitHub/network error.
 
@@ -52,21 +52,21 @@ from `release/v*` branches and publishes matching stable version tags.
 
 ## Self-managed Towel Dryers sidebar (recommended)
 
-After installing stable `v2026.11.2` and restarting Home Assistant, the
+After installing stable `v2026.11.4` and restarting Home Assistant, the
 Vipera integration registers one **Towel Dryers** sidebar entry with the
 `mdi:radiator` icon. It manages the JavaScript resources itself, similarly
 to the tado X, Sauna and Renson Ventilation dashboards.
 
 - **Overview**: live actual and target temperatures, heating request and
-  operating mode, estimated energy and cost for each installed towel dryer.
-  Click **Open heating controls** for the existing HA climate entity.
+  operating mode, estimated energy and cost for each installed towel dryer,
+  with temperature and energy graphs directly alongside the live readings.
+  One shared tado X-style period selector controls all three dryers. The
+  default remains **last 7 days**, with shorter/longer and custom periods
+  available. Click **Open heating controls** for the existing HA climate entity.
 - **Schedules**: the same native 7 × 24-week editor, cross-dryer copy
   controls, confirmations and reported-state verification as the original card.
   The untested DP105 energy reset is not surfaced in the managed panel.
-- **History**: actual and target temperature graphs per dryer plus estimated
-  energy statistics, using one shared tado X-style period selector (today,
-  week, month, year, last 7/30 days, last 12 months, last 3 years and
-  custom date ranges).
+
 
 The dashboard reads existing Tuya Local entities and HA Recorder statistics;
 it does not create new devices, rename entities, or modify user Lovelace
@@ -86,7 +86,7 @@ there are unsaved schedules, in-progress actions or pending writes. The new
 loader cannot retroactively replace an already cached old Home Assistant
 panel registration: an initial hard refresh may still be needed.
 
-### Version 2026.11.2 frontend alignment
+### Version 2026.11.4 frontend alignment
 
 This update aligns the Towel Dryers dashboard with the versioned, retryable
 frontend loaders in tado X, Sauna and Renson. It does not modify DP26 encoding,
@@ -113,6 +113,24 @@ entry when the last Vipera dryer config entry is unloaded. Registration is
 attempted before connection, so a temporarily offline dryer does not
 suppress the sidebar. After a HACS update, restart Home Assistant for
 the new path to register.
+
+### Version 2026.11.4 chart and layout fix
+
+The integration-managed dashboard now uses the same two-tab structure as
+the tado X dashboard: **Overview** and **Schedules**. All live readings,
+graphs and the common period selector are together on Overview; a separate
+History tab is no longer necessary. Towel dryers appear in a fixed
+basement → first floor → second floor order.
+
+Corrected Recorder statistics timestamps (numeric Unix milliseconds; they
+must not be parsed with `Date.parse`), added Home Assistant device-registry
+matching for dryer sensors and support for the existing optional Vipera
+temperature-history template sensors. Missing graphs identify the affected
+entity so historical availability is easier to check. The x-axis uses the
+selected period, not the first and last reported datapoints.
+
+These frontend changes leave device controls, recorded historical data,
+entity IDs and all weekly schedules untouched.
 
 ## Optional legacy Lovelace schedule card
 
