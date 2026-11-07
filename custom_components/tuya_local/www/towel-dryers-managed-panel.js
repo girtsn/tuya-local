@@ -322,12 +322,17 @@ class TowelDryersManagedPanel extends HTMLElement{
         .sort((a,b)=>a.x-b.x)
     })).filter(s=>s.points.length);
     if(!graphs.length){
+      const names=series.map(item=>item.id).filter(Boolean);
       host.append(this._el("p",
-        "No Recorder statistics available for these entities in the selected period. Check Developer Tools → Statistics or choose a wider date range.",
+        names.length?
+          "No Recorder samples in this period for "+names.join(", ")+". Check Developer Tools → Statistics.":
+          "No matching sensor entity was found for this dryer. Check its Tuya Local entity names.",
         "foot"));return;
     }
     const all=graphs.flatMap(s=>s.points);
-    const left=Math.min(...all.map(p=>p.x)),right=Math.max(...all.map(p=>p.x));
+    // The chart's horizontal axis always represents the selected date range,
+    // not the first/last available sample (which can be sparse).
+    const left=Date.parse(this._range.start),right=Date.parse(this._range.end);
     let lo=Math.min(...all.map(p=>p.y)),hi=Math.max(...all.map(p=>p.y));
     const pad=(hi-lo||Math.max(Math.abs(hi),1))*.1;lo-=pad;hi+=pad;
     const doc="http://www.w3.org/2000/svg";
