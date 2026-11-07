@@ -93,6 +93,27 @@ frontend loaders in tado X, Sauna and Renson. It does not modify DP26 encoding,
 device entities, history statistics, stored schedules or ventilation controls.
 Automatic browser hot swapping requires the new version's loader to be active.
 
+### Version 2026.11.3 sidebar URL conflict fix
+
+An existing Home Assistant Lovelace dashboard named **Towel Dryers** may use
+the `/towel-dryers` URL path. Previous fork versions also attempted to use
+that path for the integration sidebar; when already occupied, sidebar
+registration was skipped without replacing the user's dashboard.
+
+The integration-managed panel now uses its own path:
+`/tuya-local-towel-dryers`. It still appears with the **Towel Dryers**
+sidebar title and `mdi:radiator` icon, so an existing Lovelace dashboard
+and the new panel can coexist without changing either one's configuration.
+If both are visible, Home Assistant will display two **Towel Dryers**
+entries; optionally rename the existing Lovelace dashboard or hide it from
+the sidebar to distinguish them. No existing dashboards are deleted.
+
+The integration tracks panel ownership, and removes only its own sidebar
+entry when the last Vipera dryer config entry is unloaded. Registration is
+attempted before connection, so a temporarily offline dryer does not
+suppress the sidebar. After a HACS update, restart Home Assistant for
+the new path to register.
+
 ## Optional legacy Lovelace schedule card
 
 The original card stays available for dashboards you already configured.
