@@ -100,6 +100,14 @@ export function attachRecorderChartTooltip(container,svg,series,options){
         p.y.toLocaleString(undefined,{maximumFractionDigits:g.unit==="kWh"?3:2})+
           (g.unit?" "+g.unit:""):"—";
       row.append(color,label,value);tip.append(row);
+      if(valid&&Number.isFinite(p.from)){
+        const interval=document.createElement("small");
+        interval.style.cssText="display:block;margin:1px 0 5px 16px;"+
+          "white-space:normal;color:var(--secondary-text-color,#777)";
+        interval.textContent="Increase since previous reading: "+
+          new Date(p.from).toLocaleString();
+        tip.append(interval);
+      }
     });
     tip.style.display="block";
     const parent=container.getBoundingClientRect();
