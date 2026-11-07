@@ -9,6 +9,25 @@ The source of the card is kept at
 **There is no need to copy the file into `/config/www`**: this fork registers a
 direct Home Assistant HTTP endpoint when the integration loads.
 
+## Version 2026.11.12 — clean everyday Towel Dryers overview
+
+The 1–7 November comparison established that DP102 raw changes and Recorder
+statistics agree on 7 November, while historical Recorder energy statistics
+are missing or zero earlier. No destructive meter or Recorder reset is
+warranted; continue accumulating statistics.
+
+The everyday **Towel Dryers → Overview** panel now hides the verbose
+orange raw-versus-Recorder warnings and the expanded daily evidence
+audit by default. The period metric is qualified as **Recorded energy
+(available history)** so partial early statistics are not presented as a
+complete historical total. A small **Show energy diagnostics** toggle
+below the device cards enables the old evidence and comparisons on
+demand; **Hide energy diagnostics** turns them off again.
+
+The change is frontend-only: no Tuya datapoints, cumulative counters,
+device schedules, Recorder statistics, historical states, or Energy
+dashboard configuration are reset, deleted, or rewritten.
+
 ## Version 2026.11.11 — daily evidence audit for towel-dryer consumption
 
 Screenshots from 1–7 November show an unresolved difference between
