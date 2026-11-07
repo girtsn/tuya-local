@@ -9,6 +9,43 @@ The source of the card is kept at
 **There is no need to copy the file into `/config/www`**: this fork registers a
 direct Home Assistant HTTP endpoint when the integration loads.
 
+## Version 2026.11.10 — identify partial Recorder energy statistics coverage
+
+A comparison of **1–7 November 2026** showed the Energy dashboard reporting
+2.09 kWh / 1.69 kWh / 1.58 kWh for the three towel dryers, while detailed
+raw device state changes over the same selected week summed to
+15.41 kWh / 4.19 kWh / 5.84 kWh. The visible Recorder consumption
+bars appeared only near the end of the week, although temperature
+history showed earlier activity. The current device profile's
+`total_increasing` metadata was added to this fork on 6 November 2026,
+which means the earlier state history cannot automatically be counted
+as valid historical Energy-dashboard statistics.
+
+The managed panel now computes the coverage of actual Recorder
+statistics and highlights **partial coverage** when the first or last
+statistics bucket misses a material portion of the chosen period.
+The displayed Recorder kWh total is explicitly labelled **NOT a
+full-period total** when this occurs. A raw-versus-Recorder difference
+is **not** called a counter error unless the statistics cover the
+chosen period. For diagnosis, it displays:
+- Start and end of available Recorder statistics
+- Recorder kWh total for the available period
+- Raw DP102 counter changes across the selected period (unverified)
+- When possible, raw DP102 changes within the *overlapping* statistics
+  coverage, to allow a like-for-like comparison
+- Exact energy sensor entity ID
+
+For genuinely overlapping data, the original raw-versus-Recorder
+discrepancy check remains enabled. Individual reading deltas are
+still plotted only when their period total reconciles with Recorder;
+otherwise, Recorder interval totals are shown, along with the
+coverage note.
+
+No device reset, power setting, energy statistics update, or database
+backfill is performed. We cannot assert that the raw device counter
+jumps represent measured consumption: the VP102/DP102 counter
+is an estimate and may jump after configuration changes.
+
 ## Version 2026.11.9 — reconcile Towel Dryers energy with HA Energy
 
 Following a comparison of the same **1–7 November** period, the managed
