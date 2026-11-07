@@ -84,4 +84,36 @@ assert.equal(svg.children.filter(n=>n.name==="polyline").length,0,
   "Consumption uses interval bars, not a cumulative line");
 assert.equal(svg.children.filter(n=>n.name==="rect").length,3,
   "Plot non-zero positive and negative changes as bars");
+
+// Short-range history must use the ACTUAL reading change at each timestamp,
+// not an artificial kWh/hour value. The first pre-period reading is a baseline.
+panel._energyHistory["sensor.vipera_energy"]=[
+  {s:"12.00",lu:Date.parse("2026-10-31T22:00:00Z")/1000},
+  {s:"12.10",lu:Date.parse("2026-11-01T02:00:00Z")/1000},
+  {s:"12.45",lu:Date.parse("2026-11-01T04:00:00Z")/1000},
+  {s:"0.20",lu:Date.parse("2026-11-01T08:00:00Z")/1000},
+  {s:"unavailable",lu:Date.parse("2026-11-01T10:00:00Z")/1000},
+  {s:"0.45",lu:Date.parse("2026-11-01T14:00:00Z")/1000},
+];
+const meter=panel._meterDeltas("sensor.vipera_energy");
+assert.deepEqual(Array.from(meter,x=>Math.round(x.y*100)),
+  [10,35,20],"Use exact reading deltas; large counter drop is a reset");
+assert.equal(meter[0].x,Date.parse("2026-11-01T02:00:00Z"),
+  "Place usage at the actual meter update time");
+assert.equal(meter[0].from,Date.parse("2026-10-31T22:00:00Z"),
+  "Retain previous reading timestamp for the chart tooltip");
+assert.ok(Math.abs(panel._energyChanges("sensor.vipera_energy")-.65)<1e-9,
+  "Selected-period consumption matches the detailed bars");
+
+const actualChart=new Element();
+panel._chart(actualChart,[{
+  id:"sensor.vipera_energy",label:"Consumed",
+  field:"change",color:"#57995d"
+}],"kWh",{detailed:meter});
+const actualSvg=actualChart.children.find(x=>x.name==="svg");
+assert.equal(actualSvg.children.filter(x=>x.name==="rect").length,3,
+  "Short-period chart includes one energy bar for each actual meter increase");
+assert.equal(actualSvg.children.filter(x=>x.name==="polyline").length,0,
+  "Real reading deltas are not a cumulative curve");
+
 console.log("Towel dryer per-interval delta and selected-period total tests passed");
