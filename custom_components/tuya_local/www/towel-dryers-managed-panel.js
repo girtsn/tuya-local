@@ -441,7 +441,20 @@ class TowelDryersManagedPanel extends HTMLElement{
         top:28,bottom:41,yFor:y,period:this._period(),unit});
     const legend=this._el("div",null,"legend");
     for(const s of graphs){
-      const item=this._el("span",s.label+" · "+s.points.length+" points");
+      // Show actual physical quantities, not the internal Recorder sample count.
+      // Temperature is the most recent plotted bucket's average, while energy
+      // represents all available consumption changes within the chosen dates.
+      const value=isEnergy
+        ? s.points.reduce((total,p)=>total+p.y,0)
+        : s.points[s.points.length-1].y;
+      const digits=isEnergy?3:1;
+      const amount=value.toLocaleString(undefined,{
+        minimumFractionDigits:isEnergy?2:1,maximumFractionDigits:digits
+      });
+      const detail=isEnergy
+        ? amount+" kWh consumed in selected period"
+        : amount+" °C (latest recorded)";
+      const item=this._el("span",s.label+" · "+detail);
       item.style.borderLeft="4px solid "+s.color;
       legend.append(item);
     }
