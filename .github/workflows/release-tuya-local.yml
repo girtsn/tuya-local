@@ -38,6 +38,8 @@ jobs:
           assert hacs["filename"] == "tuya-local.zip"
           assert hacs["hide_default_branch"] is True
           assert Path("custom_components/tuya_local/www/vipera-schedule-card.js").is_file()
+          for asset in ("towel-dryers-loader.js", "towel-dryers-managed-panel.js", "towel-dryers-date-range-picker.js"):
+              assert (Path("custom_components/tuya_local/www") / asset).is_file()
           assert Path("custom_components/tuya_local/devices/vipera_nex_home.yaml").is_file()
           print(f"Validating HACS release {tag}")
           PY
@@ -90,6 +92,8 @@ jobs:
               assert "manifest.json" in names
               assert "devices/vipera_nex_home.yaml" in names
               assert "www/vipera-schedule-card.js" in names
+              for asset in ("towel-dryers-loader.js", "towel-dryers-managed-panel.js", "towel-dryers-date-range-picker.js"):
+                  assert f"www/{asset}" in names
               print(f"Built {output}: {len(files)} files, {output.stat().st_size} bytes")
           PY
       - name: Publish tagged, non-prerelease GitHub Release
