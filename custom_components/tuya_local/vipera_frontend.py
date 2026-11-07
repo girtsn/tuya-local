@@ -43,6 +43,11 @@ async def async_register_vipera_card(hass: HomeAssistant) -> None:
                 cache_headers=False,
             ),
             StaticPathConfig(
+                f"{base}/chart-hover-tooltip.js",
+                str(WWW / "chart-hover-tooltip.js"),
+                cache_headers=False,
+            ),
+            StaticPathConfig(
                 f"{base}/towel-dryers-date-range-picker.js",
                 str(WWW / "towel-dryers-date-range-picker.js"),
                 cache_headers=False,
