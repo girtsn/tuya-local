@@ -227,6 +227,9 @@ class TowelDryersManagedPanel extends HTMLElement{
           const amount=this._el("strong","—");
           amount.dataset.periodEnergy=String(i);
           item.append(amount);
+          const status=this._el("small",null,"energy-audit");
+          status.dataset.energyAudit=String(i);
+          item.append(status);
         }else item.append(this._live(d,key));
         metric.append(item);
       }
@@ -254,7 +257,7 @@ class TowelDryersManagedPanel extends HTMLElement{
       grid.append(card);
     }
     shell.append(grid);
-    shell.append(this._el("p","For short periods, each energy bar shows the estimated kWh increase between actual meter updates, placed at the time of the new reading. Longer periods use Recorder interval totals. The period kWh summary and the device's lifetime estimate remain available; these are estimates, not independent electrical measurements.","foot"));
+    shell.append(this._el("p","Period energy totals use the same Home Assistant Recorder statistics as the Energy dashboard. Exact meter-reading timestamps are shown only when raw device increments reconcile with Recorder; otherwise the chart uses Recorder interval totals and flags the disagreement. All values are device estimates, not independent electrical measurements.","foot"));
   }
   _schedules(shell){
     const card=this._el(TD_SCHEDULE_TAG);
@@ -315,22 +318,52 @@ class TowelDryersManagedPanel extends HTMLElement{
     return intervals.length?intervals:null;
   }
   _energyChanges(id){
-    // The displayed total must use the same source as the displayed bars.
-    const detailed=this._meterDeltas(id);
-    if(detailed)return detailed.reduce((total,p)=>total+p.y,0);
+    // HA Energy uses Recorder's sum/change statistics, NOT a hand-built sum
+    // of DP102 raw readings. Preserve that as the sole period-total source.
     const rows=id?this._stats[id]:null;
     if(!Array.isArray(rows))return null;
     const changes=rows.map(p=>p.change).filter(v=>v!=null&&Number.isFinite(Number(v)));
     return changes.length?changes.reduce((total,v)=>total+Number(v),0):null;
+  }
+  _energyComparison(id){
+    const recorder=this._energyChanges(id);
+    const raw=this._meterDeltas(id);
+    if(recorder===null)return {recorder,raw,rawTotal:null,trusted:false,discrepancy:false};
+    if(!raw)return {recorder,raw,rawTotal:null,trusted:false,discrepancy:false};
+    const rawTotal=raw.reduce((total,p)=>total+p.y,0);
+    const difference=Math.abs(rawTotal-recorder);
+    // With independent Recorder bucket rounding, a few hundredths of kWh
+    // are normal. Large differences are diagnostic, not consumption.
+    const tolerance=Math.max(0.1,Math.abs(recorder)*.05);
+    const trusted=difference<=tolerance;
+    return {recorder,raw,rawTotal,trusted,discrepancy:!trusted,difference};
+  }
+  _kwh(value){
+    return Number(value).toLocaleString(undefined,{
+      minimumFractionDigits:2,maximumFractionDigits:3
+    })+" kWh";
   }
   _syncPeriodEnergy(){
     if(this._tab!=="overview")return;
     for(const [i,d] of this._devices.entries()){
       const target=this.shadowRoot.querySelector('[data-period-energy="'+i+'"]');
       if(!target)continue;
-      const change=this._energyChanges(d.energy);
-      target.textContent=change==null?"—":
-        change.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:3})+" kWh";
+      const comparison=this._energyComparison(d.energy);
+      target.textContent=comparison.recorder==null?"—":this._kwh(comparison.recorder);
+      const note=this.shadowRoot.querySelector('[data-energy-audit="'+i+'"]');
+      if(note){
+        note.classList.toggle("warning",comparison.discrepancy);
+        if(comparison.discrepancy){
+          note.textContent="Raw device counter changes: "+this._kwh(comparison.rawTotal)+
+            " (differs by "+this._kwh(comparison.difference)+
+            "). Chart uses Recorder, as HA Energy does. Check source entity and DP102 counter.";
+        }else if(comparison.recorder===null){
+          note.textContent="No Recorder energy statistics for this sensor. "+
+            (comparison.raw?"Raw counter changes are unverified; not used as consumption.":"");
+        }else note.textContent=comparison.raw?
+          "Raw counter changes agree with Recorder (within 5% or 0.1 kWh).":
+          "Based on HA Recorder energy statistics.";
+      }
     }
   }
   async _loadHistory(){
@@ -388,10 +421,11 @@ class TowelDryersManagedPanel extends HTMLElement{
     this._syncPeriodEnergy();
     for(const [i,d] of this._devices.entries()){
       const heading=this.shadowRoot.querySelector('[data-energy-heading="'+i+'"]');
-      const detailed=this._meterDeltas(d.energy);
+      const comparison=this._energyComparison(d.energy);
+      const detailed=comparison.trusted?comparison.raw:null;
       if(heading)heading.textContent=detailed
-        ? "Estimated consumption between meter readings (kWh)"
-        : "Estimated consumption (kWh) — "+this._periodLabel()+" totals";
+        ? "Estimated consumption between verified meter readings (kWh)"
+        : "Estimated consumption (kWh) — "+this._periodLabel()+" Recorder totals";
       const temperature=this.shadowRoot.querySelector('[data-plot="'+i+':temperature"]');
       if(temperature)this._chart(temperature,[
         {id:d.actual,label:"Actual",field:"mean",color:"#2196a1"},
@@ -415,7 +449,7 @@ class TowelDryersManagedPanel extends HTMLElement{
   }
   _chart(host,series,unit,{detailed=null}={}){
     host.replaceChildren();
-    if(this._statsError&&detailed===null){
+    if(this._statsError){
       host.append(this._el("p",this._statsError,"foot"));return;
     }
     const isEnergy=series.length===1&&series[0].field==="change";
@@ -583,6 +617,8 @@ class TowelDryersManagedPanel extends HTMLElement{
       ".plot{min-height:100px}.plot svg{display:block;width:100%;max-height:280px}",
       ".legend{display:flex;flex-wrap:wrap;gap:15px;font-size:12px;color:var(--secondary-text-color,#777)}",
       ".legend span{padding-left:6px}",
+      ".energy-audit{display:block;font-size:11px;color:var(--secondary-text-color,#777);line-height:1.45;margin-top:4px}",
+      ".energy-audit.warning{color:var(--warning-color,#c38320);font-weight:600}",
       ".chart-card{margin-bottom:15px}",
       ".foot{line-height:1.6;margin:10px 0}",
       ".error{border-left:3px solid var(--error-color,#d44);padding:10px 12px}",
