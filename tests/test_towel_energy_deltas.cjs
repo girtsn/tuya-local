@@ -178,4 +178,39 @@ assert.match(report.textContent,/Partial Recorder coverage/);
 assert.match(report.textContent,/NOT a full-period total/);
 assert.match(report.textContent,/not directly comparable/);
 
+// In a partial week, the daily audit must not conflate statistics
+// coverage with successful energy increments. Show exact zero/missing.
+const evidence=panel._dailyEnergyAudit("sensor.vipera_energy");
+assert.equal(evidence.length,7);
+const day3=evidence.find(d=>d.day==="2026-11-03");
+const day5=evidence.find(d=>d.day==="2026-11-05");
+const day7=evidence.find(d=>d.day==="2026-11-07");
+assert.ok(day3&&day5&&day7);
+assert.equal(day3.recorder,null,"No Recorder buckets, not fabricated zero");
+assert.ok(day3.raw>0,"Raw counter change exists before usable statistics");
+assert.equal(day7.statBuckets,3);
+assert.ok(Math.abs(day7.recorder-2.09)<1e-9);
+assert.ok(day7.raw>0);
+assert.equal(evidence.find(d=>d.day==="2026-11-02").raw,null,
+  "No raw increment is missing, not zero");
+
+panel._range={start:"2026-11-01T00:00:00Z",end:"2027-01-01T00:00:00Z"};
+assert.equal(panel._dailyEnergyAudit("sensor.vipera_energy").length,0,
+  "Long range must not show a misleading truncated partial-month table");
+
+// Distinguish significant meter resets from downward corrections.
+panel._range={start:"2026-11-01T00:00:00Z",end:"2026-11-02T00:00:00Z"};
+panel._energyHistory["sensor.vipera_energy"]=[
+  {s:"100.00",lu:Date.parse("2026-10-31T23:00:00Z")/1000},
+  {s:"99.50",lu:Date.parse("2026-11-01T02:00:00Z")/1000},
+  {s:"0.20",lu:Date.parse("2026-11-01T08:00:00Z")/1000},
+  {s:"0.30",lu:Date.parse("2026-11-01T14:00:00Z")/1000}
+];
+const anomaly=panel._dailyEnergyAudit("sensor.vipera_energy")[0];
+assert.equal(anomaly.corrections,1);
+assert.equal(anomaly.resets,1);
+assert.equal(anomaly.rawChanges,3);
+assert.ok(anomaly.raw<0,
+  "Retain negative corrections so diagnostic does not imply only increases");
+
 console.log("Towel dryer kWh intervals, Recorder coverage, and source comparison tests passed");
