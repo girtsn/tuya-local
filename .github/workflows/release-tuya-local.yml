@@ -43,6 +43,12 @@ jobs:
           PY
       - name: Run targeted Python tests
         run: uv run pytest tests/test_vipera_frontend.py tests/test_device_config.py
+      - name: Check dashboard JavaScript modules
+        shell: bash
+        run: |
+          for file in custom_components/tuya_local/www/*.js; do
+            node --input-type=module --check < "$file"
+          done
       - name: Validate Python formatting and YAML
         run: |
           uv run ruff check custom_components/tuya_local/__init__.py custom_components/tuya_local/vipera_frontend.py tests/test_vipera_frontend.py
@@ -102,4 +108,6 @@ jobs:
 
             Install from HACS using this stable version. The archive contains
             only the required Tuya Local integration files (not the full source tree).
-            Existing tuya_local config entries must be preserved.
+            New versioned Towel Dryers sidebar dashboard: Overview, Schedules,
+            and long-term History with a tado X-compatible period picker.
+            Existing tuya_local config entries and schedule cards are preserved.
