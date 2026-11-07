@@ -59,7 +59,7 @@ class TowelDryersManagedPanel extends HTMLElement{
     this._assetError="";
     this._loadingAssets=(async()=>{
       const version=encodeURIComponent(TD_VERSION);
-      const picker=await import("./tuya-local-towel-dryers-date-range-picker.js?v="+version+retry);
+      const picker=await import("./towel-dryers-date-range-picker.js?v="+version+retry);
       // Preserve the original card and all its confirmation, conflict and write checks.
       await import("./vipera-schedule-card.js?v="+version+retry);
       if(!customElements.get(TD_SCHEDULE_TAG)||
