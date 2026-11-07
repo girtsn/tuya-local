@@ -10,7 +10,8 @@
 > After the upgrade and Home Assistant restart, open **Towel Dryers** in the
 > sidebar (radiator icon): **Overview**, **Schedules**, and **History** tabs,
 > with the same shared history period selector as tado X. No manual JS
-> resource or dashboard YAML is required for this view.\n>
+> resource or dashboard YAML is required for this view.
+>
 > **Do not delete your existing Tuya Local device configuration when
 > changing package sources.** You cannot install two `tuya_local`
 > integration packages side by side.
