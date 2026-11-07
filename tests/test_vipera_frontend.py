@@ -39,9 +39,10 @@ async def test_async_setup_serves_versioned_towel_dryer_assets():
     assert all(not static.cache_headers for static in paths)
     assert all(Path(static.path).is_file() for static in paths.values())
     assert Path(routes[VIPERA_CARD_URL].path).name == "vipera-schedule-card.js"
-    assert "customElements.get('vipera-schedule-card')" in Path(
-        routes[VIPERA_CARD_URL].path
-    ).read_text()
+    assert (
+        "customElements.get('vipera-schedule-card')"
+        in Path(routes[VIPERA_CARD_URL].path).read_text()
+    )
 
 
 @pytest.mark.asyncio
@@ -65,4 +66,6 @@ async def test_panel_is_registered_once_with_towel_dryer_icon():
     assert register.call_args.kwargs["frontend_url_path"] == PANEL_PATH
     assert register.call_args.kwargs["sidebar_title"] == "Towel Dryers"
     assert register.call_args.kwargs["sidebar_icon"] == "mdi:radiator"
-    assert register.call_args.kwargs["module_url"] == "/tuya_local/towel-dryers-loader.js"
+    assert (
+        register.call_args.kwargs["module_url"] == "/tuya_local/towel-dryers-loader.js"
+    )
