@@ -102,18 +102,44 @@ assert.equal(meter[0].x,Date.parse("2026-11-01T02:00:00Z"),
   "Place usage at the actual meter update time");
 assert.equal(meter[0].from,Date.parse("2026-10-31T22:00:00Z"),
   "Retain previous reading timestamp for the chart tooltip");
-assert.ok(Math.abs(panel._energyChanges("sensor.vipera_energy")-.65)<1e-9,
-  "Selected-period consumption matches the detailed bars");
+assert.ok(Math.abs(panel._energyChanges("sensor.vipera_energy")-.38)<1e-9,
+  "Selected-period consumption must agree with the Recorder, not raw meter jumps");
+const comparison=panel._energyComparison("sensor.vipera_energy");
+assert.ok(comparison.discrepancy);
+assert.equal(comparison.trusted,false);
+assert.ok(Math.abs(comparison.rawTotal-.65)<1e-9);
+assert.ok(Math.abs(comparison.recorder-.38)<1e-9);
+const report=new Element();
+panel.shadowRoot.querySelector=key=>{
+  if(key==='[data-period-energy="0"]')return tile;
+  if(key==='[data-energy-audit="0"]')return report;
+  return null;
+};
+report.classList={toggle(key,active){report.warning=key==="warning"&&active;}};
+panel._syncPeriodEnergy();
+assert.equal(report.warning,true,"Alert on unreconciled raw counter changes");
+assert.match(report.textContent,/Raw device counter changes/);
+assert.ok(tile.textContent.startsWith("0.38"),"Use Recorder-derived total, not raw sum");
 
-const actualChart=new Element();
-panel._chart(actualChart,[{
+// Detailed increments are diagnostic only when totals disagree.
+const statChart=new Element();
+panel._chart(statChart,[{
   id:"sensor.vipera_energy",label:"Consumed",
   field:"change",color:"#57995d"
-}],"kWh",{detailed:meter});
-const actualSvg=actualChart.children.find(x=>x.name==="svg");
-assert.equal(actualSvg.children.filter(x=>x.name==="rect").length,3,
-  "Short-period chart includes one energy bar for each actual meter increase");
-assert.equal(actualSvg.children.filter(x=>x.name==="polyline").length,0,
-  "Real reading deltas are not a cumulative curve");
+}],"kWh");
+const statSvg=statChart.children.find(x=>x.name==="svg");
+assert.ok(statSvg);
+assert.equal(statSvg.children.filter(x=>x.name==="rect").length,3,
+  "Use reset-corrected Recorder interval changes for unreliable meters");
+
+panel._energyHistory["sensor.vipera_energy"]=[
+  {s:"90.00",lu:Date.parse("2026-10-31T22:00:00Z")/1000},
+  {s:"90.12",lu:Date.parse("2026-11-01T02:00:00Z")/1000},
+  {s:"90.43",lu:Date.parse("2026-11-01T04:00:00Z")/1000},
+  {s:"90.38",lu:Date.parse("2026-11-01T08:00:00Z")/1000}
+];
+const consistent=panel._energyComparison("sensor.vipera_energy");
+assert.ok(consistent.trusted, "Allow detailed timestamp plot when it reconciles");
+assert.ok(!consistent.discrepancy);
 
 console.log("Towel dryer per-interval delta and selected-period total tests passed");
