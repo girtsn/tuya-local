@@ -20,5 +20,5 @@
         "tinytuya==1.20.0",
         "tuya-device-sharing-sdk~=0.2.4"
     ],
-    "version": "2026.11.11"
+    "version": "2026.11.12"
 }
