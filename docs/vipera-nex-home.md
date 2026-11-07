@@ -43,7 +43,7 @@ coverage note.
 
 No device reset, power setting, energy statistics update, or database
 backfill is performed. We cannot assert that the raw device counter
-jumps represent measured consumption: the VP102/DP102 counter
+jumps represent measured consumption: the DP102 counter
 is an estimate and may jump after configuration changes.
 
 ## Version 2026.11.9 — reconcile Towel Dryers energy with HA Energy
