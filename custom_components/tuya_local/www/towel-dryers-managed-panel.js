@@ -363,6 +363,7 @@ class TowelDryersManagedPanel extends HTMLElement{
         }else note.textContent=comparison.raw?
           "Raw counter changes agree with Recorder (within 5% or 0.1 kWh).":
           "Based on HA Recorder energy statistics.";
+        note.textContent+=" Source: "+(d.energy||"no matching energy sensor")+".";
       }
     }
   }
