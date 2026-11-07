@@ -315,6 +315,9 @@ class TowelDryersManagedPanel extends HTMLElement{
     return intervals.length?intervals:null;
   }
   _energyChanges(id){
+    // The displayed total must use the same source as the displayed bars.
+    const detailed=this._meterDeltas(id);
+    if(detailed)return detailed.reduce((total,p)=>total+p.y,0);
     const rows=id?this._stats[id]:null;
     if(!Array.isArray(rows))return null;
     const changes=rows.map(p=>p.change).filter(v=>v!=null&&Number.isFinite(Number(v)));
@@ -480,7 +483,8 @@ class TowelDryersManagedPanel extends HTMLElement{
           }))bar.setAttribute(k,String(v));
           const tooltip=document.createElementNS(doc,"title");
           tooltip.textContent=p.y.toLocaleString(undefined,{maximumFractionDigits:3})+
-            " kWh · "+new Date(p.x).toLocaleString();
+            " kWh"+(p.from!=null?" from "+new Date(p.from).toLocaleString():"")+
+            " to "+new Date(p.x).toLocaleString();
           bar.append(tooltip);svg.append(bar);
         }
       }else{
@@ -522,7 +526,7 @@ class TowelDryersManagedPanel extends HTMLElement{
         minimumFractionDigits:isEnergy?2:1,maximumFractionDigits:digits
       });
       const detail=isEnergy
-        ? amount+" kWh"+(detailed?" between plotted readings":" in selected period")
+        ? amount+" kWh consumed in selected period"
         : amount+" °C (latest recorded)";
       const item=this._el("span",s.label+" · "+detail);
       item.style.borderLeft="4px solid "+s.color;
