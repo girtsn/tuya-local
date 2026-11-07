@@ -1,12 +1,16 @@
-> **Girtsn fork — Tuya Local 2026.10.2.** This fork includes
+> **Girtsn fork — Tuya Local 2026.11.1.** This fork includes
 > [Vipera NEX HOME towel dryer support, the Energy dashboard fix, and a
-> bundled schedule card served directly by the integration](docs/vipera-nex-home.md).
+> bundled schedule card and self-managed Towel Dryers dashboard](docs/vipera-nex-home.md).
 > To install or update this fork, add
 > `https://github.com/girtsn/tuya-local` as a **custom Integration**
 > repository in HACS / Home Assistant Marketplace, then install the
-> **stable `v2026.10.2` release** distributed as `tuya-local.zip`.
+> **stable `v2026.11.1` release** distributed as `tuya-local.zip`.
 > Do not install the development `main` branch; this fork hides it
 > from HACS to avoid expensive source-tree downloads.
+> After the upgrade and Home Assistant restart, open **Towel Dryers** in the
+> sidebar (radiator icon): **Overview**, **Schedules**, and **History** tabs,
+> with the same shared history period selector as tado X. No manual JS
+> resource or dashboard YAML is required for this view.\n>
 > **Do not delete your existing Tuya Local device configuration when
 > changing package sources.** You cannot install two `tuya_local`
 > integration packages side by side.
