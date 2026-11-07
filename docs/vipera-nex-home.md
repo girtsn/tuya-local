@@ -9,6 +9,31 @@ The source of the card is kept at
 **There is no need to copy the file into `/config/www`**: this fork registers a
 direct Home Assistant HTTP endpoint when the integration loads.
 
+## Version 2026.11.7 — interval electricity consumption instead of cumulative curve
+
+The managed **Towel Dryers → Overview** dashboard now shows **estimated
+electricity consumed during each Recorder interval** rather than plotting the
+ever-increasing total counter. The chart uses Home Assistant's
+`recorder/statistics_during_period` `change` statistic for each
+`total_increasing` estimated-energy entity. This is preferable to manually
+subtracting consecutive `sum` samples because Recorder handles the
+baseline at the selected date range and meter resets.
+
+- **Per-interval bar chart:** 5-minute, hourly, daily, weekly or monthly kWh
+  increments, following the existing shared date-range picker.
+- **Energy used in selected period:** sum of the available Recorder
+  increments for each dryer (kWh), with **—** when no statistics exist.
+- **Total estimated energy:** the existing device-supplied cumulative meter
+  reading remains visible and can still be opened in Home Assistant.
+- **Total estimated cost:** existing cumulative cost reading remains
+  unchanged; no fabricated historical cost values are introduced.
+- Negative Recorder corrections, if present, are retained and indicated
+  in a warning colour rather than silently treated as positive usage.
+
+These are **device estimates, not a certified electricity meter**. No Tuya
+datapoints, device schedules, entity IDs, accumulated history, or electric
+heating controls are modified.
+
 ## Switching from the original Tuya Local installation
 
 **Back up Home Assistant before switching.** Your devices, config entries,
