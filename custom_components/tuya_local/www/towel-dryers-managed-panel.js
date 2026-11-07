@@ -241,7 +241,9 @@ class TowelDryersManagedPanel extends HTMLElement{
       temperature.dataset.plot=String(i)+":temperature";
       graphs.append(temperature);
       if(d.energy){
-        graphs.append(this._el("h3","Estimated electricity used per "+this._periodLabel()+" (kWh)"));
+        const heading=this._el("h3","Estimated electricity used per "+this._periodLabel()+" (kWh)");
+        heading.dataset.energyHeading=String(i);
+        graphs.append(heading);
         const energy=this._el("div",null,"plot");
         energy.dataset.plot=String(i)+":energy";
         graphs.append(energy);
@@ -316,6 +318,8 @@ class TowelDryersManagedPanel extends HTMLElement{
     if(this._tab!=="overview")return;
     this._syncPeriodEnergy();
     for(const [i,d] of this._devices.entries()){
+      const heading=this.shadowRoot.querySelector('[data-energy-heading="'+i+'"]');
+      if(heading)heading.textContent="Estimated electricity used per "+this._periodLabel()+" (kWh)";
       const temperature=this.shadowRoot.querySelector('[data-plot="'+i+':temperature"]');
       if(temperature)this._chart(temperature,[
         {id:d.actual,label:"Actual",field:"mean",color:"#2196a1"},
