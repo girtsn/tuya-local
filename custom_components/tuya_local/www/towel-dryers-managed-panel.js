@@ -87,7 +87,7 @@ class TowelDryersManagedPanel extends HTMLElement{
   }
   _name(prefix){
     if(/laundry/i.test(prefix))return "−1 floor · Laundry";
-    if(/1fl.*bathroom/i.test(prefix))return "1st floor · Bathroom";
+    if(/(?:^|_)1fl(?:_|$)/i.test(prefix))return "1st floor · Bathroom";
     if(/2fl.*bathroom/i.test(prefix))return "2nd floor · Bathroom";
     return prefix.replace(/_+/g," ").replace(/\b[a-z]/g,x=>x.toUpperCase());
   }
@@ -140,7 +140,8 @@ class TowelDryersManagedPanel extends HTMLElement{
         timer:resolve("sensor","timer_remaining")
       };
     }).sort((a,b)=>{
-      const order=x=>/laundry/.test(x.key)?0:/1fl/.test(x.key)?1:/2fl/.test(x.key)?2:3;
+      const order=x=>/laundry|basement|(^|_)-1fl(_|$)/i.test(x.key)?0:
+        /(^|_)1fl(_|$)/i.test(x.key)?1:/\b2fl\b|(^|_)2fl(_|$)/i.test(x.key)?2:3;
       return order(a)-order(b)||a.name.localeCompare(b.name);
     });
   }
@@ -266,6 +267,7 @@ class TowelDryersManagedPanel extends HTMLElement{
       .filter(id=>id&&["measurement","total","total_increasing"].includes(
         this._state(id)?.attributes?.state_class)))];
     this._statsAt=Date.now();
+    this._stats={};
     this._statsError=ids.length?"Loading Recorder statistics…":"No statistics-enabled temperature or energy entities found.";
     this._drawHistory();
     if(!ids.length)return;
@@ -297,19 +299,32 @@ class TowelDryersManagedPanel extends HTMLElement{
       ],"kWh");
     }
   }
+  _timestamp(value){
+    // Recorder statistics send numeric Unix milliseconds. Never Date.parse()
+    // them: interpreting milliseconds as date strings drops all valid points.
+    if(value==null)return NaN;
+    if(typeof value==="number"||/^\\d+$/.test(String(value))){
+      const number=Number(value);
+      return number>0&&number<1e11?number*1000:number;
+    }
+    return Date.parse(value);
+  }
   _chart(host,series,unit){
     host.replaceChildren();
     if(this._statsError){
       host.append(this._el("p",this._statsError,"foot"));return;
     }
     const graphs=series.filter(s=>s.id).map(s=>({
-      ...s,points:(this._stats[s.id]||[]).map(p=>({
-        x:Date.parse(p.start||p.end),
-        y:Number(p[s.field])
-      })).filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y))
+      ...s,points:(Array.isArray(this._stats[s.id])?this._stats[s.id]:[])
+        .filter(p=>p.start!=null&&p[s.field]!=null)
+        .map(p=>({x:this._timestamp(p.start),y:Number(p[s.field])}))
+        .filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y))
+        .sort((a,b)=>a.x-b.x)
     })).filter(s=>s.points.length);
     if(!graphs.length){
-      host.append(this._el("p","No Recorder statistics for this period. Check Developer Tools → Statistics.","foot"));return;
+      host.append(this._el("p",
+        "No Recorder statistics available for these entities in the selected period. Check Developer Tools → Statistics or choose a wider date range.",
+        "foot"));return;
     }
     const all=graphs.flatMap(s=>s.points);
     const left=Math.min(...all.map(p=>p.x)),right=Math.max(...all.map(p=>p.x));
