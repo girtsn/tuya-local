@@ -219,7 +219,7 @@ class TowelDryersManagedPanel extends HTMLElement{
       const metric=this._el("div",null,"metrics");
       for(const [key,title] of [["actual","Actual temperature"],["target","Target temperature"],
         ["heating","Heating"],["mode","Mode"],
-        ["period_energy","Energy used in selected period"],
+        ["period_energy","Recorder energy in selected period"],
         ["energy","Total estimated energy"],["cost","Total estimated cost"]]){
         const item=this._el("div",null,"metric");
         item.append(this._el("span",title,"label"));
@@ -257,7 +257,7 @@ class TowelDryersManagedPanel extends HTMLElement{
       grid.append(card);
     }
     shell.append(grid);
-    shell.append(this._el("p","Period energy totals use the same Home Assistant Recorder statistics as the Energy dashboard. Exact meter-reading timestamps are shown only when raw device increments reconcile with Recorder; otherwise the chart uses Recorder interval totals and flags the disagreement. All values are device estimates, not independent electrical measurements.","foot"));
+    shell.append(this._el("p","Recorder kWh totals cover only the intervals for which Home Assistant has usable statistics. An incomplete history is explicitly marked, rather than treated as zero consumption before tracking began. Raw counter changes are diagnostic and are compared only across overlapping coverage; they are device estimates, not independent electric-meter readings.","foot"));
   }
   _schedules(shell){
     const card=this._el(TD_SCHEDULE_TAG);
@@ -325,18 +325,45 @@ class TowelDryersManagedPanel extends HTMLElement{
     const changes=rows.map(p=>p.change).filter(v=>v!=null&&Number.isFinite(Number(v)));
     return changes.length?changes.reduce((total,v)=>total+Number(v),0):null;
   }
+  _statisticCoverage(id){
+    const rows=this._stats[id];
+    if(!Array.isArray(rows)||!rows.length||!this._range)return null;
+    const timestamps=rows.filter(row=>row.start!=null)
+      .map(row=>this._timestamp(row.start)).filter(Number.isFinite)
+      .sort((a,b)=>a-b);
+    if(!timestamps.length)return null;
+    const size=({"5minute":300000,hour:3600000,day:86400000,
+      week:604800000,month:31*86400000})[this._period()];
+    const start=Date.parse(this._range.start);
+    const end=Math.min(Date.parse(this._range.end),Date.now());
+    if(!Number.isFinite(start)||!Number.isFinite(end)||end<=start)return null;
+    const first=timestamps[0],last=timestamps[timestamps.length-1]+size;
+    return {
+      first,last,
+      partialStart:first-start>size*1.5,
+      partialEnd:end-last>size*2,
+      // A missing start is not zero usage: the Energy dashboard cannot
+      // supply consumption before the first usable statistics interval.
+    };
+  }
   _energyComparison(id){
     const recorder=this._energyChanges(id);
+    const coverage=this._statisticCoverage(id);
     const raw=this._meterDeltas(id);
-    if(recorder===null)return {recorder,raw,rawTotal:null,trusted:false,discrepancy:false};
-    if(!raw)return {recorder,raw,rawTotal:null,trusted:false,discrepancy:false};
-    const rawTotal=raw.reduce((total,p)=>total+p.y,0);
+    const rawTotal=raw?raw.reduce((total,p)=>total+p.y,0):null;
+    const incomplete=Boolean(coverage&&(coverage.partialStart||coverage.partialEnd));
+    const comparable=coverage&&raw?raw.filter(p=>
+      p.from!=null&&p.from>=coverage.first&&p.x<=coverage.last):[];
+    const overlapRaw=comparable.length?
+      comparable.reduce((total,p)=>total+p.y,0):null;
+    if(recorder===null||rawTotal===null||incomplete)
+      return {recorder,raw,rawTotal,coverage,incomplete,overlapRaw,
+        trusted:false,discrepancy:false};
     const difference=Math.abs(rawTotal-recorder);
-    // With independent Recorder bucket rounding, a few hundredths of kWh
-    // are normal. Large differences are diagnostic, not consumption.
     const tolerance=Math.max(0.1,Math.abs(recorder)*.05);
     const trusted=difference<=tolerance;
-    return {recorder,raw,rawTotal,trusted,discrepancy:!trusted,difference};
+    return {recorder,raw,rawTotal,coverage,incomplete,overlapRaw,
+      trusted,discrepancy:!trusted,difference};
   }
   _kwh(value){
     return Number(value).toLocaleString(undefined,{
@@ -352,11 +379,28 @@ class TowelDryersManagedPanel extends HTMLElement{
       target.textContent=comparison.recorder==null?"—":this._kwh(comparison.recorder);
       const note=this.shadowRoot.querySelector('[data-energy-audit="'+i+'"]');
       if(note){
-        note.classList.toggle("warning",comparison.discrepancy);
-        if(comparison.discrepancy){
-          note.textContent="Raw device counter changes: "+this._kwh(comparison.rawTotal)+
-            " (differs by "+this._kwh(comparison.difference)+
-            "). Chart uses Recorder, as HA Energy does. Check source entity and DP102 counter.";
+        note.classList.toggle("warning",comparison.discrepancy||comparison.incomplete);
+        if(comparison.incomplete){
+          const coverage=comparison.coverage;
+          const date=ms=>new Date(ms).toLocaleString(undefined,{
+            year:"numeric",month:"short",day:"numeric",
+            hour:"2-digit",minute:"2-digit"
+          });
+          note.textContent="Partial Recorder coverage: "+date(coverage.first)+
+            " – "+date(coverage.last)+". The displayed "+this._kwh(comparison.recorder)+
+            " is NOT a full-period total.";
+          if(comparison.rawTotal!==null){
+            note.textContent+=" Raw counter changes across the full selection: "+
+              this._kwh(comparison.rawTotal)+" (not directly comparable).";
+            if(comparison.overlapRaw!==null)
+              note.textContent+=" Raw changes during Recorder coverage: "+
+                this._kwh(comparison.overlapRaw)+".";
+          }
+        }else if(comparison.discrepancy){
+          note.textContent="Raw counter changes: "+this._kwh(comparison.rawTotal)+
+            " versus Recorder: "+this._kwh(comparison.recorder)+
+            " (difference "+this._kwh(comparison.difference)+
+            "). Coverage overlaps; inspect possible device counter resets.";
         }else if(comparison.recorder===null){
           note.textContent="No Recorder energy statistics for this sensor. "+
             (comparison.raw?"Raw counter changes are unverified; not used as consumption.":"");
@@ -426,7 +470,8 @@ class TowelDryersManagedPanel extends HTMLElement{
       const detailed=comparison.trusted?comparison.raw:null;
       if(heading)heading.textContent=detailed
         ? "Estimated consumption between verified meter readings (kWh)"
-        : "Estimated consumption (kWh) — "+this._periodLabel()+" Recorder totals";
+        : "Estimated consumption (kWh) — "+this._periodLabel()+" Recorder totals"+
+          (comparison.incomplete?" (partial history)":"");
       const temperature=this.shadowRoot.querySelector('[data-plot="'+i+':temperature"]');
       if(temperature)this._chart(temperature,[
         {id:d.actual,label:"Actual",field:"mean",color:"#2196a1"},
