@@ -123,3 +123,25 @@ def test_managed_panel_routes_and_imports_match_registered_assets():
     assert '"/tuya-local-towel-dryers/"' in source
     assert "./towel-dryers-date-range-picker.js" in source
     assert "./tuya-local-towel-dryers-date-range-picker.js" not in source
+
+
+def test_towel_dryers_overview_has_shared_charts_and_two_tabs():
+    """The tado X-style selector controls every overview graph, not a History tab."""
+    panel = (
+        Path(__file__).parents[1]
+        / "custom_components"
+        / "tuya_local"
+        / "www"
+        / "towel-dryers-managed-panel.js"
+    ).read_text()
+    assert 'tdPresetRange("last7")' in panel
+    assert '[["Overview","overview"],["Schedules","schedules"]]' in panel
+    assert '["History","history"]' not in panel
+    assert 'picker.addEventListener("date-range-changed"' in panel
+    assert 'temperature.dataset.plot' in panel
+    assert 'energy.dataset.plot' in panel
+    assert "this._timestamp(p.start)" in panel
+    assert "Date.parse(p.start||p.end)" not in panel
+    assert "laundry|basement" in panel
+    assert "1fl(_|$)" in panel
+    assert "2fl(_|$)" in panel
