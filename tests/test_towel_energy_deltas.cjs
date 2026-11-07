@@ -41,6 +41,14 @@ vm.runInNewContext(code,env,{filename:filepath});
 const Panel=classes.get("towel-dryers-managed-v2026-11-7");
 assert.ok(Panel,"New version-tagged panel registers");
 const panel=new Panel();
+assert.equal(panel._showEnergyDiagnostics,false,
+  "Verbose energy audit must be disabled in the default overview");
+assert.ok(code.includes('if(this._showEnergyDiagnostics){'),
+  "Audit warning element must only exist when explicitly enabled");
+assert.ok(code.includes("if(d.energy&&this._showEnergyDiagnostics){"),
+  "Daily evidence table must be hidden unless explicitly enabled");
+assert.ok(code.includes('Show energy diagnostics'),
+  "Read-only troubleshooting evidence must remain opt-in");
 panel._range={
   start:"2026-11-01T00:00:00.000Z",
   end:"2026-11-02T00:00:00.000Z"
