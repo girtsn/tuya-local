@@ -505,6 +505,7 @@ class ViperaScheduleCard extends HTMLElement {
     card.append(this._node('p','DP26 schedules are reported by the dryer through Tuya Local. Scheduled 30°C is reserved for standby. A sent command is not a verified device write; after copying, wait for the destination DP26 to update before further edits.',{class:'info'}));
   }
 }
-customElements.define('vipera-schedule-card',ViperaScheduleCard);
+if(!customElements.get('vipera-schedule-card')) customElements.define('vipera-schedule-card',ViperaScheduleCard);
 window.customCards=window.customCards||[];
-window.customCards.push({type:'vipera-schedule-card',name:'Vipera weekly schedule',description:'Native seven-day schedule editor and copy tool for Vipera Tuya Local devices'});
+if(!window.customCards.some(card=>card.type==='vipera-schedule-card'))
+  window.customCards.push({type:'vipera-schedule-card',name:'Vipera weekly schedule',description:'Native seven-day schedule editor and copy tool for Vipera Tuya Local devices'});
