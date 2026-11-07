@@ -11,7 +11,9 @@ from homeassistant.core import HomeAssistant
 _LOGGER = logging.getLogger(__name__)
 WWW = Path(__file__).parent / "www"
 MANIFEST = Path(__file__).parent / "manifest.json"
-PANEL_PATH = "towel-dryers"
+# Avoid a Lovelace dashboard URL collision (the title may still be Towel Dryers).
+PANEL_PATH = "tuya-local-towel-dryers"
+PANEL_OWNER_KEY = "tuya_local_towel_dryers_panel_owned"
 PANEL_REGISTER_ERRORS = (ValueError, RuntimeError)
 PANEL_VERSION = json.loads(MANIFEST.read_text(encoding="utf-8"))["version"]
 VIPERA_CARD_URL = "/tuya_local/vipera-schedule-card.js"
@@ -60,6 +62,12 @@ async def async_register_vipera_card(hass: HomeAssistant) -> None:
 async def async_register_towel_dryers_panel(hass: HomeAssistant) -> None:
     """Register one sidebar panel for all Vipera dryer config entries."""
     if frontend.async_panel_exists(hass, PANEL_PATH):
+        if not hass.data.get(PANEL_OWNER_KEY):
+            _LOGGER.warning(
+                "Towel Dryers sidebar path %s is already in use; "
+                "leaving the existing dashboard untouched",
+                PANEL_PATH,
+            )
         return
     try:
         await panel_custom.async_register_panel(
@@ -71,9 +79,18 @@ async def async_register_towel_dryers_panel(hass: HomeAssistant) -> None:
             module_url="/tuya_local/towel-dryers-loader.js",
             require_admin=False,
         )
+        hass.data[PANEL_OWNER_KEY] = PANEL_PATH
     except PANEL_REGISTER_ERRORS:
         _LOGGER.warning(
             "Could not register the Towel Dryers sidebar panel; existing "
             "Tuya Local entities and Lovelace cards are unchanged",
             exc_info=True,
         )
+
+ 
+def async_unregister_towel_dryers_panel(hass: HomeAssistant) -> None:
+    """Remove only the sidebar panel this integration registered."""
+    if hass.data.get(PANEL_OWNER_KEY) != PANEL_PATH:
+        return
+    frontend.async_remove_panel(hass, PANEL_PATH, warn_if_unknown=False)
+    hass.data.pop(PANEL_OWNER_KEY, None)
