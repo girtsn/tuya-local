@@ -17,6 +17,9 @@ class TowelDryersManagedPanel extends HTMLElement{
     this._assetsReady=false;this._loadingAssets=null;this._assetRetries=0;this._assetError="";
     this._range=null;this._stats={};this._statsError="";this._statsAt=0;this._request=0;
     this._energyHistory={};this._energyHistoryError="";
+    // Keep the evidence tools available for troubleshooting, but do not
+    // clutter the everyday dashboard with raw-counter warnings.
+    this._showEnergyDiagnostics=false;
     this._schedule=null;this._rendered=false;
     this._entityRegistry=null;this._registryPromise=null;this._registryAttempted=false;
   }
@@ -219,7 +222,7 @@ class TowelDryersManagedPanel extends HTMLElement{
       const metric=this._el("div",null,"metrics");
       for(const [key,title] of [["actual","Actual temperature"],["target","Target temperature"],
         ["heating","Heating"],["mode","Mode"],
-        ["period_energy","Recorder energy in selected period"],
+        ["period_energy","Recorded energy (available history)"],
         ["energy","Total estimated energy"],["cost","Total estimated cost"]]){
         const item=this._el("div",null,"metric");
         item.append(this._el("span",title,"label"));
@@ -227,9 +230,11 @@ class TowelDryersManagedPanel extends HTMLElement{
           const amount=this._el("strong","—");
           amount.dataset.periodEnergy=String(i);
           item.append(amount);
-          const status=this._el("small",null,"energy-audit");
-          status.dataset.energyAudit=String(i);
-          item.append(status);
+          if(this._showEnergyDiagnostics){
+            const status=this._el("small",null,"energy-audit");
+            status.dataset.energyAudit=String(i);
+            item.append(status);
+          }
         }else item.append(this._live(d,key));
         metric.append(item);
       }
@@ -238,7 +243,7 @@ class TowelDryersManagedPanel extends HTMLElement{
       if(d.climate)actions.append(this._button("Open heating controls",()=>this._details(d.climate)));
       if(d.energy)actions.append(this._button("Energy sensor details",()=>this._details(d.energy)));
       details.append(actions);
-      if(d.energy){
+      if(d.energy&&this._showEnergyDiagnostics){
         const disclosure=this._el("details",null,"energy-diagnostics");
         disclosure.dataset.energyDiagnostics=String(i);
         disclosure.append(this._el("summary","Examine daily energy evidence"));
@@ -266,7 +271,17 @@ class TowelDryersManagedPanel extends HTMLElement{
       grid.append(card);
     }
     shell.append(grid);
-    shell.append(this._el("p","Recorder kWh totals cover only the intervals for which Home Assistant has usable statistics. An incomplete history is explicitly marked, rather than treated as zero consumption before tracking began. Raw counter changes are diagnostic and are compared only across overlapping coverage; they are device estimates, not independent electric-meter readings.","foot"));
+    shell.append(this._el("p","Energy totals reflect available Home Assistant statistics; earlier periods without statistics are not counted. VIPERA energy counters are device estimates, not independent electricity measurements.","foot"));
+    const toggle=this._button(
+      this._showEnergyDiagnostics?"Hide energy diagnostics":"Show energy diagnostics",
+      ()=>{
+        this._showEnergyDiagnostics=!this._showEnergyDiagnostics;
+        this._render();
+      },
+      "diagnostics-toggle"
+    );
+    toggle.setAttribute("aria-pressed",String(this._showEnergyDiagnostics));
+    shell.append(toggle);
   }
   _schedules(shell){
     const card=this._el(TD_SCHEDULE_TAG);
@@ -779,6 +794,7 @@ class TowelDryersManagedPanel extends HTMLElement{
       ".plot{min-height:100px}.plot svg{display:block;width:100%;max-height:280px}",
       ".legend{display:flex;flex-wrap:wrap;gap:15px;font-size:12px;color:var(--secondary-text-color,#777)}",
       ".legend span{padding-left:6px}",
+      ".diagnostics-toggle{margin-top:7px;font-size:12px;padding:6px 9px;color:var(--secondary-text-color,#777)}",
       ".energy-audit{display:block;font-size:11px;color:var(--secondary-text-color,#777);line-height:1.45;margin-top:4px}",
       ".energy-audit.warning{color:var(--warning-color,#c38320);font-weight:600}",
       ".energy-diagnostics{margin-top:14px;min-width:0;border-top:1px solid var(--divider-color,#ddd);padding-top:11px}",
