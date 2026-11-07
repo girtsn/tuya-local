@@ -197,24 +197,52 @@ class TowelDryersManagedPanel extends HTMLElement{
     this._render();
   }
   _overview(shell){
+    const filter=this._el("section",null,"period");
+    filter.append(this._el("span","Shared history period","label"));
+    const picker=this._el(TD_PICKER_TAG);
+    picker.range=this._range;
+    picker.addEventListener("date-range-changed",event=>{
+      this._range=event.detail;
+      this._loadHistory();
+    });
+    filter.append(picker);
+    shell.append(filter);
     const grid=this._el("main",null,"grid");
-    for(const d of this._devices){
+    for(const [i,d] of this._devices.entries()){
       const card=this._el("section",null,"card");
       card.append(this._el("h2",d.name));
+      const content=this._el("div",null,"device-overview");
+      const details=this._el("div",null,"reading-column");
       const metric=this._el("div",null,"metrics");
       for(const [key,title] of [["actual","Actual temperature"],["target","Target temperature"],
         ["heating","Heating"],["mode","Mode"],["energy","Estimated energy"],["cost","Estimated cost"]]){
         const item=this._el("div",null,"metric");
-        item.append(this._el("span",title,"label"),this._live(d,key));metric.append(item);
+        item.append(this._el("span",title,"label"),this._live(d,key));
+        metric.append(item);
       }
-      card.append(metric);
+      details.append(metric);
       const actions=this._el("div",null,"actions");
       if(d.climate)actions.append(this._button("Open heating controls",()=>this._details(d.climate)));
       if(d.energy)actions.append(this._button("Energy sensor details",()=>this._details(d.energy)));
-      card.append(actions);grid.append(card);
+      details.append(actions);
+      content.append(details);
+      const graphs=this._el("div",null,"graph-column");
+      graphs.append(this._el("h3","Actual and target temperature"));
+      const temperature=this._el("div",null,"plot");
+      temperature.dataset.plot=String(i)+":temperature";
+      graphs.append(temperature);
+      if(d.energy){
+        graphs.append(this._el("h3","Estimated energy (cumulative reading)"));
+        const energy=this._el("div",null,"plot");
+        energy.dataset.plot=String(i)+":energy";
+        graphs.append(energy);
+      }
+      content.append(graphs);
+      card.append(content);
+      grid.append(card);
     }
     shell.append(grid);
-    shell.append(this._el("p","Status is read directly from Tuya Local entities; energy is the dryer's estimate, not an independent electricity meter.","foot"));
+    shell.append(this._el("p","All graphs use the shared period selector. Home Assistant Recorder stores the history; energy is the dryer's estimate, not an independent electricity meter.","foot"));
   }
   _schedules(shell){
     const card=this._el(TD_SCHEDULE_TAG);
@@ -231,33 +259,8 @@ class TowelDryersManagedPanel extends HTMLElement{
     const days=(Date.parse(this._range.end)-Date.parse(this._range.start))/86400000;
     return days<=2?"5minute":days<=21?"hour":days<=120?"day":days<=550?"week":"month";
   }
-  _history(shell){
-    const filter=this._el("div",null,"period");
-    filter.append(this._el("span","Shared history period","label"));
-    const picker=this._el(TD_PICKER_TAG);
-    picker.range=this._range;
-    picker.addEventListener("date-range-changed",e=>{
-      this._range=e.detail;this._loadHistory();
-    });
-    filter.append(picker);shell.append(filter);
-    for(const [i,d] of this._devices.entries()){
-      const card=this._el("section",null,"card chart-card");
-      card.append(this._el("h2",d.name+" · Temperature"));
-      const temperature=this._el("div",null,"plot");temperature.dataset.plot=String(i)+":temperature";
-      card.append(temperature);
-      if(d.energy){
-        card.append(this._el("h3","Estimated energy (cumulative Recorder statistics)"));
-        const energy=this._el("div",null,"plot");energy.dataset.plot=String(i)+":energy";
-        card.append(energy);
-      }
-      shell.append(card);
-    }
-    shell.append(this._el("p","Charts use Home Assistant Recorder long-term statistics; short periods show finer intervals. Missing historical data cannot be reconstructed from current device states.","foot"));
-    this._drawHistory();
-    this._loadHistory();
-  }
   async _loadHistory(){
-    if(!this._hass||!this._range||this._tab!=="history")return;
+    if(!this._hass||!this._range||this._tab!=="overview")return;
     const token=++this._request;
     const ids=[...new Set(this._devices.flatMap(d=>[d.actual,d.target,d.energy])
       .filter(id=>id&&["measurement","total","total_increasing"].includes(
@@ -272,7 +275,7 @@ class TowelDryersManagedPanel extends HTMLElement{
         end_time:this._range.end,statistic_ids:ids,period:this._period(),
         types:["mean","sum"]
       });
-      if(token!==this._request||this._tab!=="history")return;
+      if(token!==this._request||this._tab!=="overview")return;
       this._stats=data||{};this._statsError="";
     }catch(e){
       if(token!==this._request)return;
@@ -281,7 +284,7 @@ class TowelDryersManagedPanel extends HTMLElement{
     this._drawHistory();
   }
   _drawHistory(){
-    if(this._tab!=="history")return;
+    if(this._tab!=="overview")return;
     for(const [i,d] of this._devices.entries()){
       const temperature=this.shadowRoot.querySelector('[data-plot="'+i+':temperature"]');
       if(temperature)this._chart(temperature,[
@@ -371,7 +374,10 @@ class TowelDryersManagedPanel extends HTMLElement{
       "button{font:inherit;border:1px solid var(--divider-color,#ccc);color:var(--primary-text-color);background:var(--card-background-color,#fff);border-radius:9px;padding:9px 13px;cursor:pointer}",
       "button:disabled{opacity:.5;cursor:default}",
       ".tab.selected{background:var(--primary-color,#1976d2);border-color:var(--primary-color,#1976d2);color:white}",
-      ".grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));gap:14px}",
+      ".grid{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}",
+      ".device-overview{display:grid;grid-template-columns:minmax(240px,1fr) minmax(0,2fr);gap:18px}",
+      ".reading-column,.graph-column{min-width:0}",
+      ".graph-column h3{font-size:14px;font-weight:600;margin:4px 0 8px}",
       ".card{border:1px solid var(--divider-color,#ddd);border-radius:12px;background:var(--card-background-color,#fff);padding:17px;margin-bottom:14px;min-width:0}",
       ".card h2{font-size:17px;font-weight:600;margin:0 0 14px}",
       ".card h3{font-size:14px;font-weight:600;margin:16px 0 8px}",
@@ -386,6 +392,7 @@ class TowelDryersManagedPanel extends HTMLElement{
       ".chart-card{margin-bottom:15px}",
       ".foot{line-height:1.6;margin:10px 0}",
       ".error{border-left:3px solid var(--error-color,#d44);padding:10px 12px}",
+      "@media(max-width:850px){.device-overview{grid-template-columns:minmax(0,1fr)}}",
       "@media(max-width:650px){.shell{padding:12px}.metrics{gap:10px}}"
     ].join("\n");root.append(style);
     const shell=this._el("main",null,"shell");
@@ -403,7 +410,7 @@ class TowelDryersManagedPanel extends HTMLElement{
     }
     this._devices=this._getDevices();this._deviceSignature=this._devices.map(d=>d.schedule_entity).join("|");
     const tabs=this._el("nav",null,"tabs");
-    for(const [title,key] of [["Overview","overview"],["Schedules","schedules"],["History","history"]]){
+    for(const [title,key] of [["Overview","overview"],["Schedules","schedules"]]){
       const b=this._button(title,()=>this._navigate(key),"tab"+(this._tab===key?" selected":""));
       b.setAttribute("aria-current",this._tab===key?"page":"false");
       tabs.append(b);
@@ -412,9 +419,12 @@ class TowelDryersManagedPanel extends HTMLElement{
     if(!this._devices.length){
       shell.append(this._el("p","No Vipera weekly schedule entities detected. Check that the towel dryers and their Weekly schedule raw text entities are enabled in Tuya Local.","card"));
     }else if(this._tab==="schedules")this._schedules(shell);
-    else if(this._tab==="history")this._history(shell);
     else this._overview(shell);
     root.append(shell);this._rendered=true;
+    if(this._tab==="overview"){
+      this._drawHistory();
+      if(Date.now()-this._statsAt>15*60*1000)this._loadHistory();
+    }
   }
 }
 if(!customElements.get(TD_TAG))customElements.define(TD_TAG,TowelDryersManagedPanel);
