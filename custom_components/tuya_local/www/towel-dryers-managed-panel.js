@@ -16,7 +16,7 @@ class TowelDryersManagedPanel extends HTMLElement{
     this._assetsReady=false;this._loadingAssets=null;this._assetRetries=0;this._assetError="";
     this._range=null;this._stats={};this._statsError="";this._statsAt=0;this._request=0;
     this._schedule=null;this._rendered=false;
-    this._entityRegistry=null;this._registryPromise=null;
+    this._entityRegistry=null;this._registryPromise=null;this._registryAttempted=false;
   }
   set hass(value){
     this._hass=value;
@@ -92,7 +92,8 @@ class TowelDryersManagedPanel extends HTMLElement{
     return prefix.replace(/_+/g," ").replace(/\b[a-z]/g,x=>x.toUpperCase());
   }
   _ensureRegistry(){
-    if(!this._hass?.callWS||this._entityRegistry||this._registryPromise||!this.isConnected)return;
+    if(!this._hass?.callWS||this._registryAttempted||!this.isConnected)return;
+    this._registryAttempted=true;
     this._registryPromise=this._hass.callWS({type:"config/entity_registry/list"})
       .then(entries=>{
         if(!Array.isArray(entries))return;
@@ -108,24 +109,38 @@ class TowelDryersManagedPanel extends HTMLElement{
     const states=this._hass?.states||{};
     const suffix="_weekly_schedule_raw";
     const ids=Object.keys(states).filter(id=>id.startsWith("text.")&&id.endsWith(suffix));
+    const allIds=Object.keys(states);
     return ids.map(id=>{
       const prefix=id.slice(5,-suffix.length);
-      const first=(domain,name)=>domain+"."+prefix+"_"+name;
-      const valid=e=>states[e]?e:null;
-      const d={
-        key:prefix,name:this._name(prefix),schedule_entity:id,
-        climate:valid(first("climate","heating_element")),
-        actual:valid(first("sensor","actual_temperature")),
-        target:valid(first("sensor","target_temperature")),
-        effective:valid(first("sensor","effective_target_temperature")),
-        heating:valid(first("binary_sensor","heating_requested")),
-        energy:valid(first("sensor","estimated_energy")),
-        cost:valid(first("sensor","estimated_energy_cost")),
-        timer:valid(first("sensor","timer_remaining"))
+      const deviceId=this._deviceId(id);
+      const members=deviceId?allIds.filter(candidate=>this._deviceId(candidate)===deviceId):[];
+      const resolve=(domain,name)=>{
+        const exact=domain+"."+prefix+"_"+name;
+        if(states[exact])return exact;
+        const candidates=members.filter(candidate=>candidate.startsWith(domain+".")&&
+          candidate.endsWith("_"+name));
+        return candidates.length===1?candidates[0]:null;
       };
-      return d;
+      const fallback=(name)=>{
+        const floor=/laundry|basement/i.test(prefix)?"basement":
+          /(?:^|_)2fl(?:_|$)/.test(prefix)?"second_floor":
+          /(?:^|_)1fl(?:_|$)/.test(prefix)?"first_floor":null;
+        const alias=floor&&"sensor.vipera_"+floor+"_"+name+"_temperature";
+        return alias&&states[alias]?alias:null;
+      };
+      return {
+        key:prefix,name:this._name(prefix),schedule_entity:id,
+        climate:resolve("climate","heating_element"),
+        actual:resolve("sensor","actual_temperature")||fallback("actual"),
+        target:resolve("sensor","target_temperature")||fallback("target"),
+        effective:resolve("sensor","effective_target_temperature"),
+        heating:resolve("binary_sensor","heating_requested"),
+        energy:resolve("sensor","estimated_energy"),
+        cost:resolve("sensor","estimated_energy_cost"),
+        timer:resolve("sensor","timer_remaining")
+      };
     }).sort((a,b)=>{
-      const order=x=>/laundry/.test(x.key)?0:/1fl.*bathroom/.test(x.key)?1:/2fl.*bathroom/.test(x.key)?2:3;
+      const order=x=>/laundry/.test(x.key)?0:/1fl/.test(x.key)?1:/2fl/.test(x.key)?2:3;
       return order(a)-order(b)||a.name.localeCompare(b.name);
     });
   }
