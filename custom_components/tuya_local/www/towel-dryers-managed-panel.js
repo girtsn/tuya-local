@@ -1,0 +1,388 @@
+/* Integration-managed Towel Dryers dashboard for the Vipera Tuya Local profile.
+ * Uses the same tabs and date picker as tado X. No manual Lovelace resources.
+ * Versions have separate element names so the loader can hot-swap without reload.
+ */
+const TD_VERSION=(new URL(import.meta.url).pathname.match(/\/assets\/([^/]+)\//)||[])[1]||"dev";
+const TD_TAG="towel-dryers-managed-v"+TD_VERSION.replace(/\./g,"-");
+let tdPresetRange=null;
+class TowelDryersManagedPanel extends HTMLElement{
+  constructor(){
+    super();
+    this.attachShadow({mode:"open"});
+    this._hass=null;this._route=null;this._tab="overview";
+    this._devices=[];this._deviceSignature="";
+    this._assetsReady=false;this._loadingAssets=null;this._assetRetries=0;this._assetError="";
+    this._range=null;this._stats={};this._statsError="";this._statsAt=0;this._request=0;
+    this._schedule=null;this._rendered=false;
+  }
+  set hass(value){
+    this._hass=value;
+    if(!this.isConnected)return;
+    if(!this._assetsReady){this._ensureAssets();this._render();return;}
+    const devices=this._getDevices();
+    const signature=devices.map(d=>d.schedule_entity).join("|");
+    if(!this._rendered||this._deviceSignature!==signature){
+      this._devices=devices;this._deviceSignature=signature;this._render();
+    }else{
+      this._syncLive();
+      if(this._schedule)this._schedule.hass=value;
+      if(this._tab==="history"&&Date.now()-this._statsAt>15*60*1000)this._loadHistory();
+    }
+  }
+  set panel(value){this._panel=value;}
+  set narrow(value){this._narrow=Boolean(value);}
+  set route(value){
+    this._route=value;
+    const tab=(value?.path||"").split("/").filter(Boolean)[0];
+    const selected=["overview","schedules","history"].includes(tab)?tab:"overview";
+    if(selected!==this._tab){
+      if(this.hasUnsavedSchedule()){
+        // Back/forward navigation may not present a confirmation dialog.
+        window.history.replaceState(null,"","/towel-dryers/schedules");
+        return;
+      }
+      this._tab=selected;
+      if(this._assetsReady&&this._hass&&this.isConnected)this._render();
+    }
+  }
+  connectedCallback(){this._ensureAssets();if(this._hass)this._render();}
+  disconnectedCallback(){this._request++;}
+  hasUnsavedSchedule(){
+    return Boolean(this._schedule&&(this._schedule._dirty?.()||
+      this._schedule._busy||this._schedule._pendingWrites?.size));
+  }
+  _ensureAssets(){
+    if(this._assetsReady||this._loadingAssets||!this.isConnected)return;
+    const retry=this._assetRetries?"&retry="+this._assetRetries:"";
+    this._assetError="";
+    this._loadingAssets=(async()=>{
+      const version=encodeURIComponent(TD_VERSION);
+      const picker=await import("./towel-dryers-date-range-picker.js?v="+version+retry);
+      // Preserve the original card and all its confirmation, conflict and write checks.
+      await import("./vipera-schedule-card.js?v="+version+retry);
+      if(!customElements.get("vipera-schedule-card")||
+        !customElements.get("towel-dryers-date-range-picker"))
+        throw Error("Towel dryer dashboard modules were not registered");
+      tdPresetRange=picker.twPresetRange;
+      if(typeof tdPresetRange!=="function")throw Error("Date picker not available");
+      this._range??=tdPresetRange("last7");
+      this._assetsReady=true;
+    })().catch(e=>{
+      this._assetError=e?.message||String(e);
+    }).finally(()=>{
+      this._loadingAssets=null;
+      if(this.isConnected&&this._hass)this._render();
+    });
+  }
+  _el(tag,text,cls){
+    const e=document.createElement(tag);if(text!==null&&text!==undefined)e.textContent=String(text);
+    if(cls)e.className=cls;return e;
+  }
+  _button(label,click,cls){
+    const b=this._el("button",label,cls);b.type="button";b.addEventListener("click",click);return b;
+  }
+  _name(prefix){
+    if(/laundry/i.test(prefix))return "−1 floor · Laundry";
+    if(/1fl.*bathroom/i.test(prefix))return "1st floor · Bathroom";
+    if(/2fl.*bathroom/i.test(prefix))return "2nd floor · Bathroom";
+    return prefix.replace(/_+/g," ").replace(/\b[a-z]/g,x=>x.toUpperCase());
+  }
+  _getDevices(){
+    const states=this._hass?.states||{};
+    const suffix="_weekly_schedule_raw";
+    const ids=Object.keys(states).filter(id=>id.startsWith("text.")&&id.endsWith(suffix));
+    return ids.map(id=>{
+      const prefix=id.slice(5,-suffix.length);
+      const first=(domain,name)=>domain+"."+prefix+"_"+name;
+      const valid=e=>states[e]?e:null;
+      const d={
+        key:prefix,name:this._name(prefix),schedule_entity:id,
+        climate:valid(first("climate","heating_element")),
+        actual:valid(first("sensor","actual_temperature")),
+        target:valid(first("sensor","target_temperature")),
+        effective:valid(first("sensor","effective_target_temperature")),
+        heating:valid(first("binary_sensor","heating_requested")),
+        energy:valid(first("sensor","estimated_energy")),
+        cost:valid(first("sensor","estimated_energy_cost")),
+        timer:valid(first("sensor","timer_remaining"))
+      };
+      return d;
+    }).sort((a,b)=>{
+      const order=x=>/laundry/.test(x.key)?0:/1fl.*bathroom/.test(x.key)?1:/2fl.*bathroom/.test(x.key)?2:3;
+      return order(a)-order(b)||a.name.localeCompare(b.name);
+    });
+  }
+  _state(id){return id?this._hass?.states?.[id]:null;}
+  _numeric(id){const s=this._state(id)?.state;const n=Number(s);return s!=null&&s!==""&&Number.isFinite(n)?n:null;}
+  _read(d,key){
+    const climate=this._state(d.climate);
+    switch(key){
+      case "actual":return this._numeric(d.actual)??climate?.attributes?.current_temperature??null;
+      case "target":return this._numeric(d.target)??climate?.attributes?.temperature??null;
+      case "effective":return this._numeric(d.effective);
+      case "heating":return this._state(d.heating)?.state==="on"?"Requested":this._state(d.heating)?.state==="off"?"Idle":"Unknown";
+      case "mode":return climate?.attributes?.preset_mode||climate?.state||"Unavailable";
+      case "energy":return this._numeric(d.energy);
+      case "cost":return this._numeric(d.cost);
+      case "timer":return this._numeric(d.timer);
+      default:return null;
+    }
+  }
+  _display(d,key){
+    const value=this._read(d,key);
+    if(value===null||value===undefined||value==="unknown"||value==="unavailable")return "—";
+    if(["actual","target","effective"].includes(key))return Number(value).toLocaleString(undefined,{maximumFractionDigits:1})+" °C";
+    if(key==="energy")return Number(value).toLocaleString(undefined,{maximumFractionDigits:2})+" kWh";
+    if(key==="cost")return Number(value).toLocaleString(undefined,{maximumFractionDigits:2})+" €";
+    if(key==="timer")return Number(value)+" min";
+    return String(value);
+  }
+  _live(d,key){
+    const el=this._el("strong",this._display(d,key));
+    el.dataset.device=d.key;el.dataset.live=key;return el;
+  }
+  _syncLive(){
+    const map=new Map(this._devices.map(d=>[d.key,d]));
+    for(const e of this.shadowRoot.querySelectorAll("[data-live]")){
+      const d=map.get(e.dataset.device);if(d)e.textContent=this._display(d,e.dataset.live);
+    }
+  }
+  _details(id){
+    if(!id)return;
+    this.dispatchEvent(new CustomEvent("hass-more-info",{
+      detail:{entityId:id},bubbles:true,composed:true
+    }));
+  }
+  _navigate(tab){
+    if(tab===this._tab)return;
+    if(this.hasUnsavedSchedule()){
+      if(!window.confirm("Leave Schedules? Unsaved edits or unconfirmed writes could be lost."))return;
+      // Pending confirmation is managed by the card; keep it visible until acknowledged.
+      if(this._schedule?._pendingWrites?.size||this._schedule?._busy)return;
+    }
+    this._tab=tab;
+    window.history.pushState(null,"",tab==="overview"?"/towel-dryers":"/towel-dryers/"+tab);
+    this._render();
+  }
+  _overview(shell){
+    const grid=this._el("main",null,"grid");
+    for(const d of this._devices){
+      const card=this._el("section",null,"card");
+      card.append(this._el("h2",d.name));
+      const metric=this._el("div",null,"metrics");
+      for(const [key,title] of [["actual","Actual temperature"],["target","Target temperature"],
+        ["heating","Heating"],["mode","Mode"],["energy","Estimated energy"],["cost","Estimated cost"]]){
+        const item=this._el("div",null,"metric");
+        item.append(this._el("span",title,"label"),this._live(d,key));metric.append(item);
+      }
+      card.append(metric);
+      const actions=this._el("div",null,"actions");
+      if(d.climate)actions.append(this._button("Open heating controls",()=>this._details(d.climate)));
+      if(d.energy)actions.append(this._button("Energy sensor details",()=>this._details(d.energy)));
+      card.append(actions);grid.append(card);
+    }
+    shell.append(grid);
+    shell.append(this._el("p","Status is read directly from Tuya Local entities; energy is the dryer's estimate, not an independent electricity meter.","foot"));
+  }
+  _schedules(shell){
+    const card=this._el("vipera-schedule-card");
+    card.setConfig({
+      title:"Vipera native weekly schedules",
+      devices:this._devices.map(d=>({name:d.name,schedule_entity:d.schedule_entity}))
+    });
+    card.hass=this._hass;
+    this._schedule=card;
+    shell.append(card);
+    shell.append(this._el("p","Saving and copying keep the original confirmation prompts and reported-state conflict checks. DP105 experimental energy reset is not exposed here.","foot"));
+  }
+  _period(){
+    const days=(Date.parse(this._range.end)-Date.parse(this._range.start))/86400000;
+    return days<=2?"5minute":days<=21?"hour":days<=120?"day":days<=550?"week":"month";
+  }
+  _history(shell){
+    const filter=this._el("div",null,"period");
+    filter.append(this._el("span","Shared history period","label"));
+    const picker=this._el("towel-dryers-date-range-picker");
+    picker.range=this._range;
+    picker.addEventListener("date-range-changed",e=>{
+      this._range=e.detail;this._loadHistory();
+    });
+    filter.append(picker);shell.append(filter);
+    for(const [i,d] of this._devices.entries()){
+      const card=this._el("section",null,"card chart-card");
+      card.append(this._el("h2",d.name+" · Temperature"));
+      const temperature=this._el("div",null,"plot");temperature.dataset.plot=String(i)+":temperature";
+      card.append(temperature);
+      if(d.energy){
+        card.append(this._el("h3","Estimated energy (cumulative Recorder statistics)"));
+        const energy=this._el("div",null,"plot");energy.dataset.plot=String(i)+":energy";
+        card.append(energy);
+      }
+      shell.append(card);
+    }
+    shell.append(this._el("p","Charts use Home Assistant Recorder long-term statistics; short periods show finer intervals. Missing historical data cannot be reconstructed from current device states.","foot"));
+    this._drawHistory();
+    this._loadHistory();
+  }
+  async _loadHistory(){
+    if(!this._hass||!this._range||this._tab!=="history")return;
+    const token=++this._request;
+    const ids=[...new Set(this._devices.flatMap(d=>[d.actual,d.target,d.energy])
+      .filter(id=>id&&["measurement","total","total_increasing"].includes(
+        this._state(id)?.attributes?.state_class)))];
+    this._statsAt=Date.now();
+    this._statsError=ids.length?"Loading Recorder statistics…":"No statistics-enabled temperature or energy entities found.";
+    this._drawHistory();
+    if(!ids.length)return;
+    try{
+      const data=await this._hass.callWS({
+        type:"recorder/statistics_during_period",start_time:this._range.start,
+        end_time:this._range.end,statistic_ids:ids,period:this._period(),
+        types:["mean","sum"]
+      });
+      if(token!==this._request||this._tab!=="history")return;
+      this._stats=data||{};this._statsError="";
+    }catch(e){
+      if(token!==this._request)return;
+      this._stats={};this._statsError="Recorder history unavailable: "+(e?.message||String(e));
+    }
+    this._drawHistory();
+  }
+  _drawHistory(){
+    if(this._tab!=="history")return;
+    for(const [i,d] of this._devices.entries()){
+      const temperature=this.shadowRoot.querySelector('[data-plot="'+i+':temperature"]');
+      if(temperature)this._chart(temperature,[
+        {id:d.actual,label:"Actual",field:"mean",color:"#2196a1"},
+        {id:d.target,label:"Target",field:"mean",color:"#d18b38"}
+      ],"°C");
+      const energy=this.shadowRoot.querySelector('[data-plot="'+i+':energy"]');
+      if(energy)this._chart(energy,[
+        {id:d.energy,label:"Energy",field:"sum",color:"#57995d"}
+      ],"kWh");
+    }
+  }
+  _chart(host,series,unit){
+    host.replaceChildren();
+    if(this._statsError){
+      host.append(this._el("p",this._statsError,"foot"));return;
+    }
+    const graphs=series.filter(s=>s.id).map(s=>({
+      ...s,points:(this._stats[s.id]||[]).map(p=>({
+        x:Date.parse(p.start||p.end),
+        y:Number(p[s.field])
+      })).filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y))
+    })).filter(s=>s.points.length);
+    if(!graphs.length){
+      host.append(this._el("p","No Recorder statistics for this period. Check Developer Tools → Statistics.","foot"));return;
+    }
+    const all=graphs.flatMap(s=>s.points);
+    const left=Math.min(...all.map(p=>p.x)),right=Math.max(...all.map(p=>p.x));
+    let lo=Math.min(...all.map(p=>p.y)),hi=Math.max(...all.map(p=>p.y));
+    const pad=(hi-lo||Math.max(Math.abs(hi),1))*.1;lo-=pad;hi+=pad;
+    const doc="http://www.w3.org/2000/svg";
+    const svg=document.createElementNS(doc,"svg");
+    svg.setAttribute("viewBox","0 0 720 195");
+    svg.setAttribute("role","img");svg.setAttribute("aria-label","Recorder statistics in "+unit);
+    const x=p=>50+620*(right===left?.5:(p-left)/(right-left));
+    const y=v=>154-126*(v-lo)/(hi-lo);
+    for(let n=0;n<4;n++){
+      const level=28+42*n;
+      const line=document.createElementNS(doc,"line");
+      for(const [k,v] of Object.entries({x1:50,x2:670,y1:level,y2:level,stroke:"var(--divider-color,#ddd)","stroke-width":"1"}))line.setAttribute(k,v);
+      svg.append(line);
+      const text=document.createElementNS(doc,"text");
+      text.setAttribute("x","45");text.setAttribute("y",String(level+4));text.setAttribute("text-anchor","end");
+      text.setAttribute("font-size","12");text.setAttribute("fill","var(--secondary-text-color,#777)");
+      text.textContent=(hi-(level-28)/126*(hi-lo)).toFixed(1);svg.append(text);
+    }
+    for(const s of graphs){
+      const path=document.createElementNS(doc,"polyline");
+      path.setAttribute("points",s.points.map(p=>x(p.x).toFixed(1)+","+y(p.y).toFixed(1)).join(" "));
+      path.setAttribute("fill","none");path.setAttribute("stroke",s.color);
+      path.setAttribute("stroke-width","2.5");path.setAttribute("stroke-linejoin","round");
+      path.setAttribute("stroke-linecap","round");svg.append(path);
+      if(s.points.length===1){
+        const circle=document.createElementNS(doc,"circle");
+        circle.setAttribute("cx",String(x(s.points[0].x)));
+        circle.setAttribute("cy",String(y(s.points[0].y)));
+        circle.setAttribute("r","4");circle.setAttribute("fill",s.color);svg.append(circle);
+      }
+    }
+    for(const [t,anchor,at] of [[left,"start",50],[right,"end",670]]){
+      const label=document.createElementNS(doc,"text");
+      label.setAttribute("x",String(at));label.setAttribute("y","182");
+      label.setAttribute("text-anchor",anchor);label.setAttribute("font-size","12");
+      label.setAttribute("fill","var(--secondary-text-color,#777)");
+      label.textContent=new Date(t).toLocaleDateString();svg.append(label);
+    }
+    host.append(svg);
+    const legend=this._el("div",null,"legend");
+    for(const s of graphs){
+      const item=this._el("span",s.label+" · "+s.points.length+" points");
+      item.style.borderLeft="4px solid "+s.color;
+      legend.append(item);
+    }
+    host.append(legend);
+  }
+  _render(){
+    if(!this.isConnected||!this._hass)return;
+    const root=this.shadowRoot;root.replaceChildren();this._rendered=false;this._schedule=null;
+    const style=this._el("style");style.textContent=[
+      ":host{display:block;color:var(--primary-text-color);font:var(--primary-font-family,Roboto,Arial,sans-serif)}",
+      "*{box-sizing:border-box}",
+      ".shell{max-width:1280px;margin:0 auto;padding:16px 18px 32px}",
+      ".title{font-size:24px;font-weight:600;margin:0 0 4px}",
+      ".subtitle,.foot,.label{font-size:13px;color:var(--secondary-text-color,#777)}",
+      ".subtitle{margin:0 0 16px}",
+      ".tabs{display:flex;gap:7px;border-bottom:1px solid var(--divider-color,#ddd);padding-bottom:10px;margin:0 0 16px;flex-wrap:wrap}",
+      "button{font:inherit;border:1px solid var(--divider-color,#ccc);color:var(--primary-text-color);background:var(--card-background-color,#fff);border-radius:9px;padding:9px 13px;cursor:pointer}",
+      "button:disabled{opacity:.5;cursor:default}",
+      ".tab.selected{background:var(--primary-color,#1976d2);border-color:var(--primary-color,#1976d2);color:white}",
+      ".grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));gap:14px}",
+      ".card{border:1px solid var(--divider-color,#ddd);border-radius:12px;background:var(--card-background-color,#fff);padding:17px;margin-bottom:14px;min-width:0}",
+      ".card h2{font-size:17px;font-weight:600;margin:0 0 14px}",
+      ".card h3{font-size:14px;font-weight:600;margin:16px 0 8px}",
+      ".metrics{display:grid;grid-template-columns:1fr 1fr;gap:16px}",
+      ".metric{display:flex;flex-direction:column;gap:5px;min-width:0}",
+      ".metric strong{font-size:18px;font-weight:600;overflow-wrap:anywhere}",
+      ".actions{margin-top:17px;display:flex;gap:7px;flex-wrap:wrap}",
+      ".period{display:flex;flex-direction:column;align-items:start;gap:8px;margin-bottom:18px}",
+      ".plot{min-height:100px}.plot svg{display:block;width:100%;max-height:280px}",
+      ".legend{display:flex;flex-wrap:wrap;gap:15px;font-size:12px;color:var(--secondary-text-color,#777)}",
+      ".legend span{padding-left:6px}",
+      ".chart-card{margin-bottom:15px}",
+      ".foot{line-height:1.6;margin:10px 0}",
+      ".error{border-left:3px solid var(--error-color,#d44);padding:10px 12px}",
+      "@media(max-width:650px){.shell{padding:12px}.metrics{gap:10px}}"
+    ].join("\n");root.append(style);
+    const shell=this._el("main",null,"shell");
+    shell.append(this._el("h1","Towel Dryers","title"));
+    shell.append(this._el("p","Vipera NEX HOME · Tuya Local integration-managed dashboard","subtitle"));
+    if(!this._assetsReady){
+      const message=this._el("div",this._assetError?
+        "Dashboard modules could not load: "+this._assetError:
+        "Loading dashboard modules…","card"+(this._assetError?" error":""));
+      shell.append(message);
+      if(this._assetError)shell.append(this._button("Retry loading",()=>{
+        this._assetRetries++;this._assetError="";this._ensureAssets();this._render();
+      }));
+      root.append(shell);return;
+    }
+    this._devices=this._getDevices();this._deviceSignature=this._devices.map(d=>d.schedule_entity).join("|");
+    const tabs=this._el("nav",null,"tabs");
+    for(const [title,key] of [["Overview","overview"],["Schedules","schedules"],["History","history"]]){
+      const b=this._button(title,()=>this._navigate(key),"tab"+(this._tab===key?" selected":""));
+      b.setAttribute("aria-current",this._tab===key?"page":"false");
+      tabs.append(b);
+    }
+    shell.append(tabs);
+    if(!this._devices.length){
+      shell.append(this._el("p","No Vipera weekly schedule entities detected. Check that the towel dryers and their Weekly schedule raw text entities are enabled in Tuya Local.","card"));
+    }else if(this._tab==="schedules")this._schedules(shell);
+    else if(this._tab==="history")this._history(shell);
+    else this._overview(shell);
+    root.append(shell);this._rendered=true;
+  }
+}
+if(!customElements.get(TD_TAG))customElements.define(TD_TAG,TowelDryersManagedPanel);
