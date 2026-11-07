@@ -51,6 +51,8 @@ jobs:
           for file in custom_components/tuya_local/www/*.js; do
             node --input-type=module --check < "$file"
           done
+      - name: Test dashboard hot updates and schedule safeguards
+        run: node tests/test_towel_dryers_frontend.cjs
       - name: Validate Python formatting and YAML
         run: |
           uv run ruff check custom_components/tuya_local/__init__.py custom_components/tuya_local/vipera_frontend.py tests/test_vipera_frontend.py

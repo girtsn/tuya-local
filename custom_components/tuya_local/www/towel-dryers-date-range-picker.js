@@ -191,7 +191,13 @@ class TowelDryersDateRangePicker extends HTMLElement {
     right.append(footer);popup.append(right);root.append(popup);
   }
 }
+// Preserve the legacy element while giving each managed-panel version its own
+// class. Otherwise the browser can reuse an older picker after a hot update.
 if(!customElements.get("towel-dryers-date-range-picker"))
   customElements.define("towel-dryers-date-range-picker",TowelDryersDateRangePicker);
+const TW_PICKER_VERSION=(new URL(import.meta.url).searchParams.get("v")||"dev").replace(/\./g,"-");
+const TW_PICKER_TAG="towel-dryers-date-range-picker-v"+TW_PICKER_VERSION;
+if(!customElements.get(TW_PICKER_TAG))
+  customElements.define(TW_PICKER_TAG,class extends TowelDryersDateRangePicker {});
 
 export { twPresetRange };

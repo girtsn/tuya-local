@@ -1,0 +1,32 @@
+name: Validate Towel Dryers frontend
+
+on:
+  pull_request:
+    paths:
+      - 'custom_components/tuya_local/www/**'
+      - 'custom_components/tuya_local/manifest.json'
+      - 'tests/test_towel_dryers_frontend.cjs'
+      - '.github/workflows/towel-dryers-frontend.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'custom_components/tuya_local/www/**'
+      - 'custom_components/tuya_local/manifest.json'
+      - 'tests/test_towel_dryers_frontend.cjs'
+      - '.github/workflows/towel-dryers-frontend.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate frontend JavaScript syntax
+        run: |
+          for file in custom_components/tuya_local/www/*.js; do
+            node --input-type=module --check < "$file"
+          done
+      - name: Test hot reload and control safeguards
+        run: node tests/test_towel_dryers_frontend.cjs
