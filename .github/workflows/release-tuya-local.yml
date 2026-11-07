@@ -53,6 +53,8 @@ jobs:
           done
       - name: Test dashboard hot updates and schedule safeguards
         run: node tests/test_towel_dryers_frontend.cjs
+      - name: Test interactive Recorder tooltip
+        run: node tests/test_chart_hover_tooltip.cjs custom_components/tuya_local/www/chart-hover-tooltip.js
       - name: Validate Python formatting and YAML
         run: |
           uv run ruff check custom_components/tuya_local/__init__.py custom_components/tuya_local/vipera_frontend.py tests/test_vipera_frontend.py
