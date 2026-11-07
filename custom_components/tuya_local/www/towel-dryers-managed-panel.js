@@ -16,11 +16,13 @@ class TowelDryersManagedPanel extends HTMLElement{
     this._assetsReady=false;this._loadingAssets=null;this._assetRetries=0;this._assetError="";
     this._range=null;this._stats={};this._statsError="";this._statsAt=0;this._request=0;
     this._schedule=null;this._rendered=false;
+    this._entityRegistry=null;this._registryPromise=null;
   }
   set hass(value){
     this._hass=value;
     if(!this.isConnected)return;
     if(!this._assetsReady){this._ensureAssets();this._render();return;}
+    this._ensureRegistry();
     const devices=this._getDevices();
     const signature=devices.map(d=>d.schedule_entity).join("|");
     if(!this._rendered||this._deviceSignature!==signature){
@@ -28,7 +30,7 @@ class TowelDryersManagedPanel extends HTMLElement{
     }else{
       this._syncLive();
       if(this._schedule)this._schedule.hass=value;
-      if(this._tab==="history"&&Date.now()-this._statsAt>15*60*1000)this._loadHistory();
+      if(this._tab==="overview"&&Date.now()-this._statsAt>15*60*1000)this._loadHistory();
     }
   }
   set panel(value){this._panel=value;}
@@ -36,7 +38,7 @@ class TowelDryersManagedPanel extends HTMLElement{
   set route(value){
     this._route=value;
     const tab=(value?.path||"").split("/").filter(Boolean)[0];
-    const selected=["overview","schedules","history"].includes(tab)?tab:"overview";
+    const selected=tab==="schedules"?"schedules":"overview";
     if(selected!==this._tab){
       if(this.hasUnsavedSchedule()){
         // Back/forward navigation may not present a confirmation dialog.
@@ -47,7 +49,7 @@ class TowelDryersManagedPanel extends HTMLElement{
       if(this._assetsReady&&this._hass&&this.isConnected)this._render();
     }
   }
-  connectedCallback(){this._ensureAssets();if(this._hass)this._render();}
+  connectedCallback(){this._ensureAssets();this._ensureRegistry();if(this._hass)this._render();}
   disconnectedCallback(){this._request++;}
   hasUnsavedSchedule(){
     return Boolean(this._schedule&&(this._schedule._dirty?.()||
@@ -88,6 +90,19 @@ class TowelDryersManagedPanel extends HTMLElement{
     if(/1fl.*bathroom/i.test(prefix))return "1st floor · Bathroom";
     if(/2fl.*bathroom/i.test(prefix))return "2nd floor · Bathroom";
     return prefix.replace(/_+/g," ").replace(/\b[a-z]/g,x=>x.toUpperCase());
+  }
+  _ensureRegistry(){
+    if(!this._hass?.callWS||this._entityRegistry||this._registryPromise||!this.isConnected)return;
+    this._registryPromise=this._hass.callWS({type:"config/entity_registry/list"})
+      .then(entries=>{
+        if(!Array.isArray(entries))return;
+        this._entityRegistry=new Map(entries.map(e=>[e.entity_id,e.device_id]));
+        if(this.isConnected&&this._hass&&this._tab==="overview")this._render();
+      }).catch(()=>{/* use existing entity names when registry is unavailable */})
+      .finally(()=>{this._registryPromise=null;});
+  }
+  _deviceId(id){
+    return this._entityRegistry?.get(id)||this._hass?.entities?.[id]?.device_id||null;
   }
   _getDevices(){
     const states=this._hass?.states||{};
