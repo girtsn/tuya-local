@@ -238,6 +238,15 @@ class TowelDryersManagedPanel extends HTMLElement{
       if(d.climate)actions.append(this._button("Open heating controls",()=>this._details(d.climate)));
       if(d.energy)actions.append(this._button("Energy sensor details",()=>this._details(d.energy)));
       details.append(actions);
+      if(d.energy){
+        const disclosure=this._el("details",null,"energy-diagnostics");
+        disclosure.dataset.energyDiagnostics=String(i);
+        disclosure.append(this._el("summary","Examine daily energy evidence"));
+        const body=this._el("div","Loading energy history…","energy-diagnostics-body");
+        body.dataset.energyDiagnosticsBody=String(i);
+        disclosure.append(body);
+        details.append(disclosure);
+      }
       content.append(details);
       const graphs=this._el("div",null,"graph-column");
       graphs.append(this._el("h3","Actual and target temperature"));
@@ -311,11 +320,68 @@ class TowelDryersManagedPanel extends HTMLElement{
         // smaller negative corrections, not fabricated positive usage.
         const change=difference<0&&
           difference < -previous.value*.1 ? reading.value : difference;
-        intervals.push({x:reading.x,y:change,from:previous.x});
+        intervals.push({
+          x:reading.x,y:change,from:previous.x,
+          before:previous.value,after:reading.value,
+          kind:difference<0?
+            (difference < -previous.value*.1?"possible_reset":"downward_correction"):
+            (difference>0?"increase":"unchanged")
+        });
       }
       previous=reading;
     }
     return intervals.length?intervals:null;
+  }
+  _dailyEnergyAudit(id){
+    // Compare like-for-like calendar DAYS, not just the first and last
+    // available statistics timestamp. No assumed zeros for missing data.
+    if(!this._range)return [];
+    const start=new Date(this._range.start);
+    const end=new Date(Math.min(Date.parse(this._range.end),Date.now()));
+    if(!Number.isFinite(start.getTime())||!Number.isFinite(end.getTime()))return [];
+    const days=new Map();
+    const keyAt=ms=>{
+      const d=new Date(ms);
+      const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0");
+      return y+"-"+m+"-"+String(d.getDate()).padStart(2,"0");
+    };
+    // This table is for short-term diagnostic ranges. Avoid hundreds of
+    // empty rows when the picker is on a multi-year view.
+    const maxDays=35;
+    const date=new Date(start.getFullYear(),start.getMonth(),start.getDate());
+    for(let n=0;n<maxDays&&date<end;n++,date.setDate(date.getDate()+1)){
+      const key=keyAt(date.getTime());
+      days.set(key,{day:key,recorder:null,statBuckets:0,
+        raw:null,rawChanges:0,resets:0,corrections:0,
+        firstPositiveStat:null,firstPositiveRaw:null});
+    }
+    const stats=this._stats[id];
+    if(Array.isArray(stats)){
+      for(const p of stats){
+        const timestamp=this._timestamp(p.start);
+        if(!Number.isFinite(timestamp)||p.change==null||
+          !Number.isFinite(Number(p.change)))continue;
+        const day=days.get(keyAt(timestamp));
+        if(!day)continue;
+        const value=Number(p.change);
+        day.recorder=(day.recorder??0)+value;
+        day.statBuckets++;
+        if(value>0&&day.firstPositiveStat===null)day.firstPositiveStat=timestamp;
+      }
+    }
+    const raw=this._meterDeltas(id);
+    if(raw){
+      for(const p of raw){
+        const day=days.get(keyAt(p.x));
+        if(!day)continue;
+        day.raw=(day.raw??0)+p.y;
+        day.rawChanges++;
+        if(p.kind==="possible_reset")day.resets++;
+        if(p.kind==="downward_correction")day.corrections++;
+        if(p.y>0&&day.firstPositiveRaw===null)day.firstPositiveRaw=p.x;
+      }
+    }
+    return [...days.values()];
   }
   _energyChanges(id){
     // HA Energy uses Recorder's sum/change statistics, NOT a hand-built sum
@@ -370,12 +436,61 @@ class TowelDryersManagedPanel extends HTMLElement{
       minimumFractionDigits:2,maximumFractionDigits:3
     })+" kWh";
   }
+  _updateDailyEnergyAudit(index,id){
+    const host=this.shadowRoot.querySelector('[data-energy-diagnostics-body="'+index+'"]');
+    if(!host)return;
+    host.replaceChildren();
+    if(!this._stats[id]&&!this._energyHistory[id]){
+      host.append(this._el("p","No recorded counter or energy statistics found.","foot"));
+      return;
+    }
+    const rows=this._dailyEnergyAudit(id);
+    if(!rows.length){
+      host.append(this._el("p","Select up to 35 days to compare daily evidence.","foot"));
+      return;
+    }
+    const intro=this._el("p",
+      "Each row compares raw DP102 changes with Recorder's kWh statistics on "+
+      "that calendar day. ‘—’ means no usable sample, not zero. "+
+      "Possible resets and downward corrections are unverified device events.",
+      "foot");
+    host.append(intro);
+    const wrap=this._el("div",null,"energy-audit-scroll");
+    const table=this._el("table",null,"energy-daily-table");
+    const head=this._el("tr");
+    for(const name of ["Date","Recorder","DP102 raw","Stats buckets",
+      "Raw changes","Resets","Corrections"])head.append(this._el("th",name));
+    const thead=this._el("thead");thead.append(head);table.append(thead);
+    const tbody=this._el("tbody");
+    const fmt=value=>value===null?"—":this._kwh(value);
+    for(const day of rows){
+      const row=this._el("tr");
+      const values=[day.day,fmt(day.recorder),fmt(day.raw),
+        day.statBuckets||"—",day.rawChanges||"—",
+        day.resets||"—",day.corrections||"—"];
+      for(const value of values)row.append(this._el("td",value));
+      if(day.recorder!==null&&day.raw!==null&&
+        Math.abs(day.recorder-day.raw)>Math.max(0.1,Math.abs(day.recorder)*.05))
+        row.className="energy-disagree";
+      tbody.append(row);
+    }
+    table.append(tbody);wrap.append(table);host.append(wrap);
+    const firstStat=rows.find(x=>x.firstPositiveStat!==null);
+    const firstRaw=rows.find(x=>x.firstPositiveRaw!==null);
+    const statLabel=firstStat?new Date(firstStat.firstPositiveStat).toLocaleString():"none recorded";
+    const rawLabel=firstRaw?new Date(firstRaw.firstPositiveRaw).toLocaleString():"none recorded";
+    host.append(this._el("p","First positive Recorder increment: "+statLabel+
+      ". First positive raw-counter increment: "+rawLabel+
+      ". Stats rows with zero change can exist even if earlier raw readings increased.",
+      "foot"));
+  }
   _syncPeriodEnergy(){
     if(this._tab!=="overview")return;
     for(const [i,d] of this._devices.entries()){
       const target=this.shadowRoot.querySelector('[data-period-energy="'+i+'"]');
       if(!target)continue;
       const comparison=this._energyComparison(d.energy);
+      this._updateDailyEnergyAudit(i,d.energy);
       target.textContent=comparison.recorder==null?"—":this._kwh(comparison.recorder);
       const note=this.shadowRoot.querySelector('[data-energy-audit="'+i+'"]');
       if(note){
@@ -665,6 +780,14 @@ class TowelDryersManagedPanel extends HTMLElement{
       ".legend span{padding-left:6px}",
       ".energy-audit{display:block;font-size:11px;color:var(--secondary-text-color,#777);line-height:1.45;margin-top:4px}",
       ".energy-audit.warning{color:var(--warning-color,#c38320);font-weight:600}",
+      ".energy-diagnostics{margin-top:14px;min-width:0;border-top:1px solid var(--divider-color,#ddd);padding-top:11px}",
+      ".energy-diagnostics summary{cursor:pointer;font-size:12px;font-weight:600}",
+      ".energy-diagnostics-body{font-size:11px;line-height:1.45}",
+      ".energy-audit-scroll{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}",
+      ".energy-daily-table{border-collapse:collapse;min-width:520px;width:100%;font-size:11px}",
+      ".energy-daily-table td,.energy-daily-table th{border-bottom:1px solid var(--divider-color,#ddd);padding:6px;text-align:right;white-space:nowrap}",
+      ".energy-daily-table td:first-child,.energy-daily-table th:first-child{text-align:left}",
+      ".energy-daily-table .energy-disagree td{color:var(--warning-color,#c38320);font-weight:600}",
       ".chart-card{margin-bottom:15px}",
       ".foot{line-height:1.6;margin:10px 0}",
       ".error{border-left:3px solid var(--error-color,#d44);padding:10px 12px}",
