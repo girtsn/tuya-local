@@ -4,6 +4,8 @@
  */
 const TD_VERSION=(new URL(import.meta.url).pathname.match(/\/assets\/([^/]+)\//)||[])[1]||"dev";
 const TD_TAG="towel-dryers-managed-v"+TD_VERSION.replace(/\./g,"-");
+const TD_PICKER_TAG="towel-dryers-date-range-picker-v"+TD_VERSION.replace(/\./g,"-");
+const TD_SCHEDULE_TAG="vipera-schedule-card-v"+TD_VERSION.replace(/\./g,"-");
 let tdPresetRange=null;
 class TowelDryersManagedPanel extends HTMLElement{
   constructor(){
@@ -60,9 +62,9 @@ class TowelDryersManagedPanel extends HTMLElement{
       const picker=await import("./towel-dryers-date-range-picker.js?v="+version+retry);
       // Preserve the original card and all its confirmation, conflict and write checks.
       await import("./vipera-schedule-card.js?v="+version+retry);
-      if(!customElements.get("vipera-schedule-card")||
-        !customElements.get("towel-dryers-date-range-picker"))
-        throw Error("Towel dryer dashboard modules were not registered");
+      if(!customElements.get(TD_SCHEDULE_TAG)||
+        !customElements.get(TD_PICKER_TAG))
+        throw Error("Versioned Towel Dryers dashboard modules were not registered");
       tdPresetRange=picker.twPresetRange;
       if(typeof tdPresetRange!=="function")throw Error("Date picker not available");
       this._range??=tdPresetRange("last7");
@@ -185,7 +187,7 @@ class TowelDryersManagedPanel extends HTMLElement{
     shell.append(this._el("p","Status is read directly from Tuya Local entities; energy is the dryer's estimate, not an independent electricity meter.","foot"));
   }
   _schedules(shell){
-    const card=this._el("vipera-schedule-card");
+    const card=this._el(TD_SCHEDULE_TAG);
     card.setConfig({
       title:"Vipera native weekly schedules",
       devices:this._devices.map(d=>({name:d.name,schedule_entity:d.schedule_entity}))
@@ -202,7 +204,7 @@ class TowelDryersManagedPanel extends HTMLElement{
   _history(shell){
     const filter=this._el("div",null,"period");
     filter.append(this._el("span","Shared history period","label"));
-    const picker=this._el("towel-dryers-date-range-picker");
+    const picker=this._el(TD_PICKER_TAG);
     picker.range=this._range;
     picker.addEventListener("date-range-changed",e=>{
       this._range=e.detail;this._loadHistory();
