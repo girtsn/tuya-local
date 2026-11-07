@@ -97,7 +97,7 @@ export function attachRecorderChartTooltip(container,svg,series,options){
       const value=document.createElement("strong");
       value.style.marginLeft="7px";value.style.fontVariantNumeric="tabular-nums";
       value.textContent=valid?
-        p.y.toLocaleString(undefined,{maximumFractionDigits:2})+
+        p.y.toLocaleString(undefined,{maximumFractionDigits:g.unit==="kWh"?3:2})+
           (g.unit?" "+g.unit:""):"—";
       row.append(color,label,value);tip.append(row);
     });
