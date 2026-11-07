@@ -37,7 +37,7 @@ async def test_async_setup_serves_versioned_towel_dryer_assets():
         "/tuya_local/manifest.json",
     }
     assert all(not static.cache_headers for static in paths)
-    assert all(Path(static.path).is_file() for static in paths.values())
+    assert all(Path(static.path).is_file() for static in routes.values())
     assert Path(routes[VIPERA_CARD_URL].path).name == "vipera-schedule-card.js"
     assert (
         "customElements.get('vipera-schedule-card')"
