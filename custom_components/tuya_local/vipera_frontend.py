@@ -87,7 +87,7 @@ async def async_register_towel_dryers_panel(hass: HomeAssistant) -> None:
             exc_info=True,
         )
 
- 
+
 def async_unregister_towel_dryers_panel(hass: HomeAssistant) -> None:
     """Remove only the sidebar panel this integration registered."""
     if hass.data.get(PANEL_OWNER_KEY) != PANEL_PATH:
