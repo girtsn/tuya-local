@@ -19,6 +19,9 @@ const twPresetRange=(preset,base=new Date())=>{
   const weekOffset=(now.getDay()-twFirstWeekday()+7)%7;
   let start,end=tomorrow;
   switch(preset){
+    case "last24":
+      return {start:new Date(base.getTime()-86400000).toISOString(),
+        end:base.toISOString(),preset};
     case "today":start=now;break;
     case "yesterday":start=twAddDays(now,-1);end=now;break;
     case "week":start=twAddDays(now,-weekOffset);break;
@@ -72,12 +75,15 @@ class TowelDryersDateRangePicker extends HTMLElement {
     }));
   }
   _shift(direction){
-    const start=twMidnight(new Date(this._range.start));
-    const end=twMidnight(new Date(this._range.end));
+    const start=new Date(this._range.start);
+    const end=new Date(this._range.end);
     const preset=this._range.preset;
     let nextStart,nextEnd;
     const months=({month:1,quarter:3,year:12})[preset];
-    if(months){
+    if(preset==="last24"){
+      nextStart=new Date(start.getTime()+direction*86400000);
+      nextEnd=new Date(end.getTime()+direction*86400000);
+    }else if(months){
       nextStart=new Date(start.getFullYear(),start.getMonth()+months*direction,1);
       nextEnd=new Date(start.getFullYear(),start.getMonth()+months*(direction+1),1);
       const tomorrow=twAddDays(twMidnight(new Date()),1);
@@ -136,9 +142,12 @@ class TowelDryersDateRangePicker extends HTMLElement {
     const start=twMidnight(new Date(this._range.start));
     const end=twMidnight(new Date(this._range.end));
     const bar=this._el("div",null,"toolbar");
-    const label=twDateText(start)+" – "+twDateText(twAddDays(end,-1));
+    const label=this._range.preset==="last24"?
+      start.toLocaleString(undefined,{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"})+
+      " – "+end.toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"}):
+      twDateText(start)+" – "+twDateText(twAddDays(end,-1));
     bar.append(this._btn("▣  "+label,()=>{this._open=!this._open;this._render();},"label"));
-    bar.append(this._btn("Now",()=>{const r=twPresetRange(this._range.preset==="custom"?"week":this._range.preset);this._apply(twMidnight(new Date(r.start)),twMidnight(new Date(r.end)),r.preset);},"now"));
+    bar.append(this._btn("Now",()=>{const r=twPresetRange(this._range.preset==="custom"?"week":this._range.preset);this._apply(new Date(r.start),new Date(r.end),r.preset);},"now"));
     bar.append(this._btn("‹",()=>this._shift(-1),"chevron"));
     bar.append(this._btn("›",()=>this._shift(1),"chevron",end>=twAddDays(twMidnight(new Date()),1)));
     root.append(bar);
@@ -146,14 +155,14 @@ class TowelDryersDateRangePicker extends HTMLElement {
     const popup=this._el("div",null,"popup");
     const presets=this._el("div",null,"presets");
     for(const [key,title] of [
-      ["today","Today"],["yesterday","Yesterday"],["week","This week"],
+      ["last24","Last 24 hours"],["today","Today"],["yesterday","Yesterday"],["week","This week"],
       ["month","This month"],["quarter","This quarter"],["year","This year"],
       ["last7","Last 7 days"],["last30","Last 30 days"],
       ["last365","Last 365 days"],["last12months","Last 12 months"],
       ["last3years","Last 3 years"]
     ]){
       presets.append(this._btn(title,()=>{
-        const r=twPresetRange(key);this._apply(twMidnight(new Date(r.start)),twMidnight(new Date(r.end)),key);
+        const r=twPresetRange(key);this._apply(new Date(r.start),new Date(r.end),key);
       },"preset"+(this._range.preset===key?" selected":"")));
     }
     popup.append(presets);
