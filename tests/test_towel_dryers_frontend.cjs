@@ -36,7 +36,7 @@ async function main(){
   function evalComponent(name,installed){
     let js=read(name);
     js=js.replaceAll("import.meta.url",
-      JSON.stringify("/tuya_local/assets/"+installed+"/"+name+"?v="+installed));
+      JSON.stringify("http://homeassistant.local/tuya_local/assets/"+installed+"/"+name+"?v="+installed));
     js=js.replace(/^export\s*\{[^\n]*\};?\s*$/gm,"");
     vm.runInNewContext("(()=>{\n"+js+"\n})()",env,{filename:name});
   }
