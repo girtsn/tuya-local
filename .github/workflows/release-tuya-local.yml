@@ -117,3 +117,5 @@ jobs:
             New versioned Towel Dryers sidebar dashboard: Overview, Schedules,
             and long-term History with a tado X-compatible period picker.
             Existing tuya_local config entries and schedule cards are preserved.
+            Mobile Home Assistant navigation is restored: the Towel Dryers panel
+            now offers a hamburger button that opens the native HA sidebar.
