@@ -9,6 +9,40 @@ The source of the card is kept at
 **There is no need to copy the file into `/config/www`**: this fork registers a
 direct Home Assistant HTTP endpoint when the integration loads.
 
+## Version 2026.11.9 — reconcile Towel Dryers energy with HA Energy
+
+Following a comparison of the same **1–7 November** period, the managed
+dashboard's hand-calculated raw DP102 meter changes could substantially
+exceed the quantities shown by Home Assistant's Energy dashboard.
+
+- **Period kWh uses Recorder `change` statistics only**, the same
+  statistics family used by Home Assistant Energy. This replaces the raw
+  reading-delta sum introduced in v2026.11.8.
+- Detailed raw counter steps are used for the timestamped chart **only when
+  their selected-period total agrees with Recorder**, within the larger of
+  0.1 kWh or 5%. Otherwise the chart shows Recorder interval consumption
+  (5-minute/hour/day/week/month depending on the selected range).
+- An explicit **raw vs Recorder discrepancy** warning shows both totals,
+  their difference, and the precise source sensor entity ID. Use this ID to
+  verify that the Energy dashboard is actually configured to the same
+  counter. If it uses a different sensor, the dashboards cannot be expected
+  to match.
+- If Recorder has no statistics, the dashboard shows **—** instead of
+  promoting unverified raw device counter changes to consumption.
+- The device's separate cumulative **Total estimated energy** and
+  **Total estimated cost** remain shown as read-only device reports.
+
+The original Vipera profile warned that DP102 may jump backwards on
+device reset or wattage-configuration changes. Reset detection based only
+on a raw reading drop can overestimate consumption or misclassify a firmware
+adjustment. Home Assistant Recorder handles total_increasing reset
+semantics consistently across Energy and this dashboard, but those
+statistics can still be affected by erroneous device readings.
+
+These are all **estimated quantities**, not power measurements from a
+dedicated electricity meter. No device settings, statistics, entity IDs,
+energy history or schedule data are changed.
+
 ## Version 2026.11.8 — energy use at actual meter-reading timestamps
 
 The Towel Dryers energy chart now uses **detailed Home Assistant state
