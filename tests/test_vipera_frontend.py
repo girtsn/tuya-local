@@ -27,12 +27,13 @@ async def test_async_setup_serves_versioned_towel_dryer_assets():
     assert await async_setup(hass, {}) is True
     register_static_paths.assert_awaited_once()
     paths = register_static_paths.call_args.args[0]
-    assert len(paths) == 6
+    assert len(paths) == 7
     routes = {static.url_path: static for static in paths}
     assert set(routes) == {
         VIPERA_CARD_URL,
         "/tuya_local/towel-dryers-loader.js",
         f"/tuya_local/assets/{PANEL_VERSION}/managed-panel.js",
+        f"/tuya_local/assets/{PANEL_VERSION}/chart-hover-tooltip.js",
         f"/tuya_local/assets/{PANEL_VERSION}/towel-dryers-date-range-picker.js",
         f"/tuya_local/assets/{PANEL_VERSION}/vipera-schedule-card.js",
         "/tuya_local/manifest.json",
