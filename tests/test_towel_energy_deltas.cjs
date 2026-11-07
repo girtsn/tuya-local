@@ -194,7 +194,7 @@ assert.ok(day7.raw>0);
 assert.equal(evidence.find(d=>d.day==="2026-11-02").raw,null,
   "No raw increment is missing, not zero");
 
-panel._range={start:"2026-11-01T00:00:00Z",end:"2027-01-01T00:00:00Z"};
+panel._range={start:"2026-08-01T00:00:00Z",end:"2026-10-01T00:00:00Z"};
 assert.equal(panel._dailyEnergyAudit("sensor.vipera_energy").length,0,
   "Long range must not show a misleading truncated partial-month table");
 
