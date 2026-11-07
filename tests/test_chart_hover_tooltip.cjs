@@ -55,4 +55,24 @@ svg.handlers.keydown({key:"ArrowRight",preventDefault(){}});
 assert.equal(tip.style.display,"block","Keyboard should select the first sample");
 svg.handlers.blur();
 assert.equal(tip.style.display,"none");
-console.log("Recorder hover, touch, keyboard and missing-data tests passed");
+// A meter increment is tied to two real timestamps, not to an assumed
+// hourly consumption rate. The tooltip must disclose the previous reading.
+const meterHost=new Element("section"),meterSvg=new Element("svg");
+const before=start-20*60000;
+context.attachRecorderChartTooltip(meterHost,meterSvg,[
+  {label:"Estimated consumption",color:"#559955",points:[
+    {x:start+hour,y:0.25,from:before}
+  ]}
+],{start,end,width:400,height:230,left:40,right:20,top:10,bottom:30,
+  yFor:v=>200-v*100,period:"hour",unit:"kWh"});
+const meterHit=meterSvg.children.find(x=>x.tag==="rect"&&
+  x.attrs["pointer-events"]==="all");
+const meterTip=meterHost.children.find(x=>x.className==="recorder-hover-tooltip");
+meterHit.handlers.pointermove({clientX:clientX(start+hour),
+  clientY:95,pointerType:"mouse"});
+assert.equal(meterTip.style.display,"block");
+assert.equal(meterTip.children[1].children.at(-1).textContent,"0.25 kWh");
+assert.ok(meterTip.children.some(x=>
+  x.textContent.includes("Increase since previous reading")),
+  "Display the actual start of the meter-reading interval");
+console.log("Recorder hover, touch, keyboard, timestamp and missing-data tests passed");
