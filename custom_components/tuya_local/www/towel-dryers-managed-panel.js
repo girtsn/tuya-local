@@ -16,6 +16,7 @@ class TowelDryersManagedPanel extends HTMLElement{
     this._devices=[];this._deviceSignature="";
     this._assetsReady=false;this._loadingAssets=null;this._assetRetries=0;this._assetError="";
     this._range=null;this._stats={};this._statsError="";this._statsAt=0;this._request=0;
+    this._energyHistory={};this._energyHistoryError="";
     this._schedule=null;this._rendered=false;
     this._entityRegistry=null;this._registryPromise=null;this._registryAttempted=false;
   }
@@ -241,7 +242,7 @@ class TowelDryersManagedPanel extends HTMLElement{
       temperature.dataset.plot=String(i)+":temperature";
       graphs.append(temperature);
       if(d.energy){
-        const heading=this._el("h3","Estimated electricity used per "+this._periodLabel()+" (kWh)");
+        const heading=this._el("h3","Estimated electricity consumed (kWh)");
         heading.dataset.energyHeading=String(i);
         graphs.append(heading);
         const energy=this._el("div",null,"plot");
@@ -253,7 +254,7 @@ class TowelDryersManagedPanel extends HTMLElement{
       grid.append(card);
     }
     shell.append(grid);
-    shell.append(this._el("p","Estimated energy bars show the kWh change in each Recorder interval; the period total sums those changes. The total energy counter is retained for reference. Values are device estimates, not independent electricity-meter readings.","foot"));
+    shell.append(this._el("p","For short periods, each energy bar shows the estimated kWh increase between actual meter updates, placed at the time of the new reading. Longer periods use Recorder interval totals. The period kWh summary and the device's lifetime estimate remain available; these are estimates, not independent electrical measurements.","foot"));
   }
   _schedules(shell){
     const card=this._el(TD_SCHEDULE_TAG);
@@ -271,7 +272,47 @@ class TowelDryersManagedPanel extends HTMLElement{
     return days<=2?"5minute":days<=21?"hour":days<=120?"day":days<=550?"week":"month";
   }
   _periodLabel(){
-    return ({"5minute":"5 minutes",hour:"hour",day:"day",week:"week",month:"month"})[this._period()];
+    return ({"5minute":"5-minute",hour:"hourly",day:"daily",week:"weekly",month:"monthly"})[this._period()];
+  }
+  _useDetailedEnergy(){
+    // Raw state history is usually retained for 10 days. Avoid downloading
+    // unbounded years of events; longer ranges use Recorder's reset-safe
+    // interval changes instead.
+    const duration=Date.parse(this._range.end)-Date.parse(this._range.start);
+    return Number.isFinite(duration)&&duration>0&&duration<=7*86400000;
+  }
+  _historyTime(row){
+    const raw=row?.lu??row?.last_updated??row?.lc??row?.last_changed;
+    if(typeof raw==="number")return raw<1e11?raw*1000:raw;
+    return typeof raw==="string"?Date.parse(raw):NaN;
+  }
+  _meterDeltas(id){
+    const rows=this._energyHistory[id];
+    if(!Array.isArray(rows)||rows.length<2)return null;
+    const from=Date.parse(this._range.start),until=Math.min(Date.parse(this._range.end),Date.now());
+    const states=rows.map(row=>({
+      x:this._historyTime(row),
+      value:Number(row.s??row.state),
+      raw:row.s??row.state,
+    })).filter(p=>Number.isFinite(p.x)).sort((a,b)=>a.x-b.x);
+    const intervals=[];
+    let previous=null;
+    for(const reading of states){
+      if(reading.raw==null||String(reading.raw).trim()===""||
+        !Number.isFinite(reading.value)||reading.value<0){
+        previous=null;continue;
+      }
+      if(previous&&reading.x>previous.x&&reading.x>=from&&reading.x<=until){
+        const difference=reading.value-previous.value;
+        // HA's total_increasing resets after a large drop. Preserve
+        // smaller negative corrections, not fabricated positive usage.
+        const change=difference<0&&
+          difference < -previous.value*.1 ? reading.value : difference;
+        intervals.push({x:reading.x,y:change,from:previous.x});
+      }
+      previous=reading;
+    }
+    return intervals.length?intervals:null;
   }
   _energyChanges(id){
     const rows=id?this._stats[id]:null;
@@ -296,21 +337,46 @@ class TowelDryersManagedPanel extends HTMLElement{
       .filter(id=>id&&["measurement","total","total_increasing"].includes(
         this._state(id)?.attributes?.state_class)))];
     this._statsAt=Date.now();
-    this._stats={};
+    this._stats={};this._energyHistory={};this._energyHistoryError="";
     this._statsError=ids.length?"Loading Recorder statistics…":"No statistics-enabled temperature or energy entities found.";
     this._drawHistory();
     if(!ids.length)return;
-    try{
-      const data=await this._hass.callWS({
+    const detailedIds=this._useDetailedEnergy()
+      ? [...new Set(this._devices.map(d=>d.energy).filter(Boolean))] : [];
+    // The two queries are independent. If detailed history was purged, the
+    // chart falls back to HA's aggregated Recorder change statistics.
+    const [statistics,detailed]=await Promise.allSettled([
+      this._hass.callWS({
         type:"recorder/statistics_during_period",start_time:this._range.start,
         end_time:this._range.end,statistic_ids:ids,period:this._period(),
         types:["mean","change"]
-      });
-      if(token!==this._request||this._tab!=="overview")return;
-      this._stats=data||{};this._statsError="";
-    }catch(e){
-      if(token!==this._request)return;
-      this._stats={};this._statsError="Recorder history unavailable: "+(e?.message||String(e));
+      }),
+      detailedIds.length
+        ? this._hass.callWS({
+            type:"history/history_during_period",
+            start_time:this._range.start,end_time:this._range.end,
+            entity_ids:detailedIds,
+            include_start_time_state:true,significant_changes_only:true,
+            minimal_response:true,no_attributes:true
+          })
+        : Promise.resolve({})
+    ]);
+    if(token!==this._request||this._tab!=="overview")return;
+    if(statistics.status==="fulfilled"){
+      this._stats=statistics.value||{};this._statsError="";
+    }else{
+      this._stats={};
+      this._statsError="Recorder statistics unavailable: "+
+        (statistics.reason?.message||String(statistics.reason));
+    }
+    if(detailed.status==="fulfilled"){
+      const result=detailed.value||{};
+      if(Array.isArray(result)){
+        // Compatible with legacy Recorder responses which return arrays.
+        this._energyHistory=Object.fromEntries(detailedIds.map((id,i)=>[id,result[i]||[]]));
+      }else this._energyHistory=result;
+    }else{
+      this._energyHistoryError=String(detailed.reason?.message||detailed.reason);
     }
     this._drawHistory();
   }
@@ -319,7 +385,10 @@ class TowelDryersManagedPanel extends HTMLElement{
     this._syncPeriodEnergy();
     for(const [i,d] of this._devices.entries()){
       const heading=this.shadowRoot.querySelector('[data-energy-heading="'+i+'"]');
-      if(heading)heading.textContent="Estimated electricity used per "+this._periodLabel()+" (kWh)";
+      const detailed=this._meterDeltas(d.energy);
+      if(heading)heading.textContent=detailed
+        ? "Estimated energy added between meter readings (kWh)"
+        : "Estimated energy used per "+this._periodLabel()+" interval (kWh)";
       const temperature=this.shadowRoot.querySelector('[data-plot="'+i+':temperature"]');
       if(temperature)this._chart(temperature,[
         {id:d.actual,label:"Actual",field:"mean",color:"#2196a1"},
@@ -328,7 +397,7 @@ class TowelDryersManagedPanel extends HTMLElement{
       const energy=this.shadowRoot.querySelector('[data-plot="'+i+':energy"]');
       if(energy)this._chart(energy,[
         {id:d.energy,label:"Consumed",field:"change",color:"#57995d"}
-      ],"kWh");
+      ],"kWh",{detailed});
     }
   }
   _timestamp(value){
@@ -341,13 +410,15 @@ class TowelDryersManagedPanel extends HTMLElement{
     }
     return Date.parse(value);
   }
-  _chart(host,series,unit){
+  _chart(host,series,unit,{detailed=null}={}){
     host.replaceChildren();
-    if(this._statsError){
+    if(this._statsError&&detailed===null){
       host.append(this._el("p",this._statsError,"foot"));return;
     }
+    const isEnergy=series.length===1&&series[0].field==="change";
     const graphs=series.filter(s=>s.id).map(s=>({
-      ...s,points:(Array.isArray(this._stats[s.id])?this._stats[s.id]:[])
+      ...s,points:isEnergy&&detailed!==null?detailed:
+        (Array.isArray(this._stats[s.id])?this._stats[s.id]:[])
         .filter(p=>p.start!=null&&p[s.field]!=null)
         .map(p=>({x:this._timestamp(p.start),y:Number(p[s.field])}))
         .filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y))
@@ -365,7 +436,6 @@ class TowelDryersManagedPanel extends HTMLElement{
     // The chart's horizontal axis always represents the selected date range,
     // not the first/last available sample (which can be sparse).
     const left=Date.parse(this._range.start),right=Date.parse(this._range.end);
-    const isEnergy=series.length===1&&series[0].field==="change";
     let lo=Math.min(...all.map(p=>p.y)),hi=Math.max(...all.map(p=>p.y));
     if(isEnergy){
       // Interval energy is a quantity, not a meter reading. Include the
@@ -452,7 +522,7 @@ class TowelDryersManagedPanel extends HTMLElement{
         minimumFractionDigits:isEnergy?2:1,maximumFractionDigits:digits
       });
       const detail=isEnergy
-        ? amount+" kWh consumed in selected period"
+        ? amount+" kWh"+(detailed?" between plotted readings":" in selected period")
         : amount+" °C (latest recorded)";
       const item=this._el("span",s.label+" · "+detail);
       item.style.borderLeft="4px solid "+s.color;
