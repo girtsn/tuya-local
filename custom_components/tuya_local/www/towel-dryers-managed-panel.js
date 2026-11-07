@@ -339,6 +339,7 @@ class TowelDryersManagedPanel extends HTMLElement{
     const start=new Date(this._range.start);
     const end=new Date(Math.min(Date.parse(this._range.end),Date.now()));
     if(!Number.isFinite(start.getTime())||!Number.isFinite(end.getTime()))return [];
+    if(end-start>35*86400000)return [];
     const days=new Map();
     const keyAt=ms=>{
       const d=new Date(ms);
