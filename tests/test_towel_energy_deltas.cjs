@@ -50,7 +50,10 @@ panel._stats={
     {start:1793491200000,sum:90.0,change:0.12},
     {start:1793494800000,sum:90.0,change:0},
     {start:1793498400000,sum:90.0,change:0.31},
-    {start:1793502000000,sum:90.0,change:null}
+    {start:1793502000000,sum:90.0,change:null},
+    // Recorder has zero-usage buckets too. Include the final bucket so the
+    // initial test genuinely covers the whole selected day.
+    {start:Date.parse("2026-11-01T23:55:00Z"),change:0}
   ]
 };
 assert.ok(Math.abs(panel._energyChanges("sensor.vipera_energy")-0.43)<1e-9,
@@ -142,4 +145,37 @@ const consistent=panel._energyComparison("sensor.vipera_energy");
 assert.ok(consistent.trusted, "Allow detailed timestamp plot when it reconciles");
 assert.ok(!consistent.discrepancy);
 
-console.log("Towel dryer per-interval delta and selected-period total tests passed");
+// Real-world case: the meter states exist for all 7 days, but Recorder
+// statistics only started shortly before the end of the selection.
+panel._range={
+  start:"2026-11-01T00:00:00Z",
+  end:"2026-11-08T00:00:00Z"
+};
+panel._stats["sensor.vipera_energy"]=[
+  {start:Date.parse("2026-11-07T19:00:00Z"),change:0.9},
+  {start:Date.parse("2026-11-07T20:00:00Z"),change:0.7},
+  {start:Date.parse("2026-11-07T21:00:00Z"),change:0.49}
+];
+panel._energyHistory["sensor.vipera_energy"]=[
+  {s:"10.00",lu:Date.parse("2026-10-31T23:00:00Z")/1000},
+  {s:"12.00",lu:Date.parse("2026-11-03T02:00:00Z")/1000},
+  {s:"14.00",lu:Date.parse("2026-11-05T02:00:00Z")/1000},
+  {s:"15.90",lu:Date.parse("2026-11-07T20:00:00Z")/1000},
+  {s:"16.90",lu:Date.parse("2026-11-07T21:00:00Z")/1000}
+];
+const incomplete=panel._energyComparison("sensor.vipera_energy");
+assert.equal(incomplete.incomplete,true);
+assert.equal(incomplete.coverage.partialStart,true);
+assert.equal(incomplete.discrepancy,false,
+  "Do not accuse meter of faulty readings when Recorder covers less history");
+assert.equal(incomplete.trusted,false,
+  "Do not assert that the complete raw timeline matches partial statistics");
+assert.ok(incomplete.rawTotal>incomplete.recorder);
+panel._syncPeriodEnergy();
+assert.ok(tile.textContent.startsWith("2.09"),
+  "Report only the portion that is actually in Recorder");
+assert.match(report.textContent,/Partial Recorder coverage/);
+assert.match(report.textContent,/NOT a full-period total/);
+assert.match(report.textContent,/not directly comparable/);
+
+console.log("Towel dryer kWh intervals, Recorder coverage, and source comparison tests passed");
