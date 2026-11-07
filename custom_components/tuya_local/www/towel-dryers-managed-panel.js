@@ -390,8 +390,8 @@ class TowelDryersManagedPanel extends HTMLElement{
       const heading=this.shadowRoot.querySelector('[data-energy-heading="'+i+'"]');
       const detailed=this._meterDeltas(d.energy);
       if(heading)heading.textContent=detailed
-        ? "Estimated energy added between meter readings (kWh)"
-        : "Estimated energy used per "+this._periodLabel()+" interval (kWh)";
+        ? "Estimated consumption between meter readings (kWh)"
+        : "Estimated consumption (kWh) — "+this._periodLabel()+" totals";
       const temperature=this.shadowRoot.querySelector('[data-plot="'+i+':temperature"]');
       if(temperature)this._chart(temperature,[
         {id:d.actual,label:"Actual",field:"mean",color:"#2196a1"},
