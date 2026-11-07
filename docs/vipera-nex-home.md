@@ -1,4 +1,4 @@
-# Vipera NEX HOME towel dryers — Tuya Local HACS fork (2026.10.2)
+# Vipera NEX HOME towel dryers — Tuya Local HACS fork (2026.11.1)
 
 This is a fork of [make-all/tuya-local](https://github.com/make-all/tuya-local)
 with stable HACS ZIP releases, the Vipera NEX HOME device profile and the custom 7 x 24-hour schedule
@@ -27,7 +27,7 @@ deleted. Both repositories provide the **same integration domain**,
    entries, and avoid restarting between removing the old package and
    installing the new one.
 3. Download/install the new custom repository **girtsn/tuya-local**
-   and select the **stable release `v2026.10.2`**, **not `main`**.
+   and select the **stable release `v2026.11.1`**, **not `main`**.
    HACS downloads the small versioned `tuya-local.zip` file rather than
    fetching the entire source repository. It installs into the existing
    location `/config/custom_components/tuya_local`.
@@ -35,12 +35,12 @@ deleted. Both repositories provide the **same integration domain**,
    that the `tuya_local` integration loads and the three dryer entities
    retain their names and entity IDs.
 5. Confirm the Integration/Marketplace details show fork version
-   `2026.10.2`; ensure HACS/Marketplace no longer manages the upstream
+   `2026.11.1`; ensure HACS/Marketplace no longer manages the upstream
    package for the same directory.
 
 If the repository is already listed as a custom repository, do not create
 another listing for the same fork. **Refresh/reload the repository in HACS**
-so the latest stable release is visible, then choose `v2026.10.2`.
+so the latest stable release is visible, then choose `v2026.11.1`.
 If the download progress stalls again, inspect **Settings → System → Logs**
 and HACS logs; the UI alone is insufficient to diagnose a GitHub/network error.
 
@@ -50,7 +50,41 @@ The release ZIP contains exactly the integration folder's contents, including
 `www/vipera-schedule-card.js`. A GitHub Actions workflow generates this archive
 from `release/v*` branches and publishes matching stable version tags.
 
-## Use the dashboard card without any file copying
+## Self-managed Towel Dryers sidebar (recommended)
+
+After installing stable `v2026.11.1` and restarting Home Assistant, the
+Vipera integration registers one **Towel Dryers** sidebar entry with the
+`mdi:radiator` icon. It manages the JavaScript resources itself, similarly
+to the tado X, Sauna and Renson Ventilation dashboards.
+
+- **Overview**: live actual and target temperatures, heating request and
+  operating mode, estimated energy and cost for each installed towel dryer.
+  Click **Open heating controls** for the existing HA climate entity.
+- **Schedules**: the same native 7 × 24-week editor, cross-dryer copy
+  controls, confirmations and reported-state verification as the original card.
+  The untested DP105 energy reset is not surfaced in the managed panel.
+- **History**: actual and target temperature graphs per dryer plus estimated
+  energy statistics, using one shared tado X-style period selector (today,
+  week, month, year, last 7/30 days, last 12 months, last 3 years and
+  custom date ranges).
+
+The dashboard reads existing Tuya Local entities and HA Recorder statistics;
+it does not create new devices, rename entities, or modify user Lovelace
+dashboards or automations. Long-term graphs require Recorder to have collected
+statistics; prior unavailable measurements are not reconstructed.
+
+**Frontend reloads:** the stable panel loader checks the installed manifest,
+loads version-specific JS modules, and retries after a temporary upgrade/HTTP
+failure, without requiring Ctrl+F5. If HACS updated the files while Home
+Assistant is running, restart Home Assistant to register the new asset paths.
+Unsaved/pending schedule writes are protected from automatic panel replacement.
+
+## Optional legacy Lovelace schedule card
+
+The original card stays available for dashboards you already configured.
+It does not need to be installed again to use the sidebar.
+
+### Manual configuration of the legacy card (only if needed)
 
 The integration registers and serves:
 
