@@ -109,6 +109,7 @@ async def test_unregister_does_not_remove_an_existing_users_panel():
         remove.assert_called_once_with(hass, PANEL_PATH, warn_if_unknown=False)
         assert not hass.data
 
+
 def test_managed_panel_routes_and_imports_match_registered_assets():
     """Prevent regressions from changing an asset URL while renaming panel route."""
     source = (
@@ -120,5 +121,5 @@ def test_managed_panel_routes_and_imports_match_registered_assets():
     ).read_text()
     assert '"/tuya-local-towel-dryers"' in source
     assert '"/tuya-local-towel-dryers/"' in source
-    assert './towel-dryers-date-range-picker.js' in source
-    assert './tuya-local-towel-dryers-date-range-picker.js' not in source
+    assert "./towel-dryers-date-range-picker.js" in source
+    assert "./tuya-local-towel-dryers-date-range-picker.js" not in source
