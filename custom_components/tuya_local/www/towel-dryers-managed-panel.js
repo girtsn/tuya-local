@@ -40,7 +40,7 @@ class TowelDryersManagedPanel extends HTMLElement{
     if(selected!==this._tab){
       if(this.hasUnsavedSchedule()){
         // Back/forward navigation may not present a confirmation dialog.
-        window.history.replaceState(null,"","/towel-dryers/schedules");
+        window.history.replaceState(null,"","/tuya-local-towel-dryers/schedules");
         return;
       }
       this._tab=selected;
@@ -59,7 +59,7 @@ class TowelDryersManagedPanel extends HTMLElement{
     this._assetError="";
     this._loadingAssets=(async()=>{
       const version=encodeURIComponent(TD_VERSION);
-      const picker=await import("./towel-dryers-date-range-picker.js?v="+version+retry);
+      const picker=await import("./tuya-local-towel-dryers-date-range-picker.js?v="+version+retry);
       // Preserve the original card and all its confirmation, conflict and write checks.
       await import("./vipera-schedule-card.js?v="+version+retry);
       if(!customElements.get(TD_SCHEDULE_TAG)||
@@ -163,7 +163,7 @@ class TowelDryersManagedPanel extends HTMLElement{
       if(this._schedule?._pendingWrites?.size||this._schedule?._busy)return;
     }
     this._tab=tab;
-    window.history.pushState(null,"",tab==="overview"?"/towel-dryers":"/towel-dryers/"+tab);
+    window.history.pushState(null,"",tab==="overview"?"/tuya-local-towel-dryers":"/tuya-local-towel-dryers/"+tab);
     this._render();
   }
   _overview(shell){
