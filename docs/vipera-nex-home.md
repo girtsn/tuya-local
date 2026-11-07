@@ -86,7 +86,7 @@ there are unsaved schedules, in-progress actions or pending writes. The new
 loader cannot retroactively replace an already cached old Home Assistant
 panel registration: an initial hard refresh may still be needed.
 
-### Version 2026.11.4 frontend alignment
+### Version 2026.11.2 frontend alignment
 
 This update aligns the Towel Dryers dashboard with the versioned, retryable
 frontend loaders in tado X, Sauna and Renson. It does not modify DP26 encoding,
