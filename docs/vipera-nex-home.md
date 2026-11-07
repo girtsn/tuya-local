@@ -9,6 +9,36 @@ The source of the card is kept at
 **There is no need to copy the file into `/config/www`**: this fork registers a
 direct Home Assistant HTTP endpoint when the integration loads.
 
+## Version 2026.11.11 — daily evidence audit for towel-dryer consumption
+
+Screenshots from 1–7 November show an unresolved difference between
+Home Assistant Recorder and raw VIPERA DP102 energy-counter steps.
+For the three dryers, Recorder reports 2.09 / 1.69 / 1.58 kWh versus
+raw-step arithmetic 15.41 / 4.19 / 5.84 kWh.
+
+The previous coverage diagnostic looked only at the **first and last**
+statistics timestamps, which can make a partially missing middle
+look fully covered. It also cannot distinguish a day with valid zero
+consumption from one with **no valid energy statistics**.
+
+The updated **Towel Dryers → Overview → Examine daily energy evidence**
+disclosure is **read-only** and shows, for each calendar day in a
+selected range up to 35 days:
+- kWh in Recorder's `change` statistics (missing vs zero distinguished)
+- kWh from consecutive DP102 raw readings, when detailed history exists
+- Number of Recorder statistics buckets and raw reading changes
+- Counts of possible 10%-threshold counter resets and smaller downward corrections
+- First positive Recorder statistic vs first positive raw-counter event
+
+These figures are for *diagnosis*, not a claim that raw DP102 is
+measured electric consumption. A difference in available bucket
+coverage or a meter discontinuity can distort the comparison. Even
+inside a period's first and last Recorder timestamps, intervening
+hours may be missing, so the daily evidence table is essential.
+
+No stored statistics, entity metadata, the Energy dashboard, Tuya
+device datapoints, power configuration or schedules are changed.
+
 ## Version 2026.11.10 — identify partial Recorder energy statistics coverage
 
 A comparison of **1–7 November 2026** showed the Energy dashboard reporting
