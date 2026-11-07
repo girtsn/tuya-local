@@ -121,7 +121,7 @@ panel.shadowRoot.querySelector=key=>{
 report.classList={toggle(key,active){report.warning=key==="warning"&&active;}};
 panel._syncPeriodEnergy();
 assert.equal(report.warning,true,"Alert on unreconciled raw counter changes");
-assert.match(report.textContent,/Raw device counter changes/);
+assert.match(report.textContent,/Raw counter changes/);
 assert.ok(tile.textContent.startsWith("0.38"),"Use Recorder-derived total, not raw sum");
 
 // Detailed increments are diagnostic only when totals disagree.
