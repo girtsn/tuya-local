@@ -139,8 +139,8 @@ class TowelDryersDateRangePicker extends HTMLElement {
       ".choose{background:var(--primary-color,#039bc6);color:var(--text-primary-color,#fff)}",
       "@media(max-width:570px){.popup{grid-template-columns:minmax(0,1fr);width:min(360px,calc(100vw - 30px))}.presets{display:grid;grid-template-columns:1fr 1fr;max-height:140px;border-right:0;border-bottom:1px solid var(--divider-color,#ddd)}.preset{padding:7px 8px}}"
     ].join("\n");root.append(style);
-    const start=twMidnight(new Date(this._range.start));
-    const end=twMidnight(new Date(this._range.end));
+    const start=this._range.preset==="last24"?new Date(this._range.start):twMidnight(new Date(this._range.start));
+    const end=this._range.preset==="last24"?new Date(this._range.end):twMidnight(new Date(this._range.end));
     const bar=this._el("div",null,"toolbar");
     const label=this._range.preset==="last24"?
       start.toLocaleString(undefined,{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"})+
