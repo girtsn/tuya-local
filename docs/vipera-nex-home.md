@@ -9,6 +9,36 @@ The source of the card is kept at
 **There is no need to copy the file into `/config/www`**: this fork registers a
 direct Home Assistant HTTP endpoint when the integration loads.
 
+## Version 2026.11.8 — energy use at actual meter-reading timestamps
+
+The Towel Dryers energy chart now uses **detailed Home Assistant state
+history for periods of seven days or less**, showing the change in the
+device-reported energy estimate between each two consecutive valid
+readings. The bar's time is when the new reading arrived. Hover/tap shows
+the amount in kWh and the prior reading time. There is no assumption
+that each change happened during exactly one hour and no conversion
+to kW.
+
+If detailed history is unavailable or the selected range exceeds seven
+days, the chart falls back to **Recorder's interval `change` totals**.
+These are amounts (kWh) for each displayed interval, not rates in kWh/h.
+Home Assistant ordinarily purges detailed states after 10 days while
+retaining hourly long-term statistics. The chart therefore labels the
+aggregation rather than implying meter-update precision in old data.
+
+The legend shows the latest recorded Actual/Target temperatures in °C
+and total selected-period estimated consumption in kWh instead of
+internal Recorder sample counts. The selected-period tile uses the
+same source as its chart; the cumulative lifetime kWh counter is left
+unchanged. Resets and short negative corrections are distinguished
+using the same threshold semantics as Home Assistant's
+`total_increasing` statistics.
+
+**Measurement caveat:** The dryer supplies an *estimated* counter.
+If it updates infrequently, the increase is known only between the
+two reading times. The chart cannot infer the exact moment power
+was consumed or reconstruct records before HA stored them.
+
 ## Version 2026.11.7 — interval electricity consumption instead of cumulative curve
 
 The managed **Towel Dryers → Overview** dashboard now shows **estimated
