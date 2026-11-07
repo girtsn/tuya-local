@@ -217,9 +217,16 @@ class TowelDryersManagedPanel extends HTMLElement{
       const details=this._el("div",null,"reading-column");
       const metric=this._el("div",null,"metrics");
       for(const [key,title] of [["actual","Actual temperature"],["target","Target temperature"],
-        ["heating","Heating"],["mode","Mode"],["energy","Estimated energy"],["cost","Estimated cost"]]){
+        ["heating","Heating"],["mode","Mode"],
+        ["period_energy","Energy used in selected period"],
+        ["energy","Total estimated energy"],["cost","Total estimated cost"]]){
         const item=this._el("div",null,"metric");
-        item.append(this._el("span",title,"label"),this._live(d,key));
+        item.append(this._el("span",title,"label"));
+        if(key==="period_energy"){
+          const amount=this._el("strong","—");
+          amount.dataset.periodEnergy=String(i);
+          item.append(amount);
+        }else item.append(this._live(d,key));
         metric.append(item);
       }
       details.append(metric);
@@ -234,7 +241,7 @@ class TowelDryersManagedPanel extends HTMLElement{
       temperature.dataset.plot=String(i)+":temperature";
       graphs.append(temperature);
       if(d.energy){
-        graphs.append(this._el("h3","Estimated energy (cumulative reading)"));
+        graphs.append(this._el("h3","Estimated electricity used per "+this._periodLabel()+" (kWh)"));
         const energy=this._el("div",null,"plot");
         energy.dataset.plot=String(i)+":energy";
         graphs.append(energy);
@@ -244,7 +251,7 @@ class TowelDryersManagedPanel extends HTMLElement{
       grid.append(card);
     }
     shell.append(grid);
-    shell.append(this._el("p","All graphs use the shared period selector. Home Assistant Recorder stores the history; energy is the dryer's estimate, not an independent electricity meter.","foot"));
+    shell.append(this._el("p","Estimated energy bars show the kWh change in each Recorder interval; the period total sums those changes. The total energy counter is retained for reference. Values are device estimates, not independent electricity-meter readings.","foot"));
   }
   _schedules(shell){
     const card=this._el(TD_SCHEDULE_TAG);
@@ -261,6 +268,25 @@ class TowelDryersManagedPanel extends HTMLElement{
     const days=(Date.parse(this._range.end)-Date.parse(this._range.start))/86400000;
     return days<=2?"5minute":days<=21?"hour":days<=120?"day":days<=550?"week":"month";
   }
+  _periodLabel(){
+    return ({"5minute":"5 minutes",hour:"hour",day:"day",week:"week",month:"month"})[this._period()];
+  }
+  _energyChanges(id){
+    const rows=id?this._stats[id]:null;
+    if(!Array.isArray(rows))return null;
+    const changes=rows.map(p=>p.change).filter(v=>v!=null&&Number.isFinite(Number(v)));
+    return changes.length?changes.reduce((total,v)=>total+Number(v),0):null;
+  }
+  _syncPeriodEnergy(){
+    if(this._tab!=="overview")return;
+    for(const [i,d] of this._devices.entries()){
+      const target=this.shadowRoot.querySelector('[data-period-energy="'+i+'"]');
+      if(!target)continue;
+      const change=this._energyChanges(d.energy);
+      target.textContent=change==null?"—":
+        change.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:3})+" kWh";
+    }
+  }
   async _loadHistory(){
     if(!this._hass||!this._range||this._tab!=="overview")return;
     const token=++this._request;
@@ -276,7 +302,7 @@ class TowelDryersManagedPanel extends HTMLElement{
       const data=await this._hass.callWS({
         type:"recorder/statistics_during_period",start_time:this._range.start,
         end_time:this._range.end,statistic_ids:ids,period:this._period(),
-        types:["mean","sum"]
+        types:["mean","change"]
       });
       if(token!==this._request||this._tab!=="overview")return;
       this._stats=data||{};this._statsError="";
@@ -288,6 +314,7 @@ class TowelDryersManagedPanel extends HTMLElement{
   }
   _drawHistory(){
     if(this._tab!=="overview")return;
+    this._syncPeriodEnergy();
     for(const [i,d] of this._devices.entries()){
       const temperature=this.shadowRoot.querySelector('[data-plot="'+i+':temperature"]');
       if(temperature)this._chart(temperature,[
@@ -296,7 +323,7 @@ class TowelDryersManagedPanel extends HTMLElement{
       ],"°C");
       const energy=this.shadowRoot.querySelector('[data-plot="'+i+':energy"]');
       if(energy)this._chart(energy,[
-        {id:d.energy,label:"Energy",field:"sum",color:"#57995d"}
+        {id:d.energy,label:"Consumed",field:"change",color:"#57995d"}
       ],"kWh");
     }
   }
@@ -334,12 +361,22 @@ class TowelDryersManagedPanel extends HTMLElement{
     // The chart's horizontal axis always represents the selected date range,
     // not the first/last available sample (which can be sparse).
     const left=Date.parse(this._range.start),right=Date.parse(this._range.end);
+    const isEnergy=series.length===1&&series[0].field==="change";
     let lo=Math.min(...all.map(p=>p.y)),hi=Math.max(...all.map(p=>p.y));
-    const pad=(hi-lo||Math.max(Math.abs(hi),1))*.1;lo-=pad;hi+=pad;
+    if(isEnergy){
+      // Interval energy is a quantity, not a meter reading. Include the
+      // zero baseline and retain negative statistics corrections if present.
+      lo=Math.min(0,lo);hi=Math.max(0,hi);
+      const scale=hi-lo||1;hi+=scale*.08;
+      if(lo<0)lo-=scale*.08;
+    }else{
+      const pad=(hi-lo||Math.max(Math.abs(hi),1))*.1;lo-=pad;hi+=pad;
+    }
     const doc="http://www.w3.org/2000/svg";
     const svg=document.createElementNS(doc,"svg");
     svg.setAttribute("viewBox","0 0 720 195");
-    svg.setAttribute("role","img");svg.setAttribute("aria-label","Recorder statistics in "+unit);
+    svg.setAttribute("role","img");svg.setAttribute("aria-label",
+      (series.length===1&&series[0].field==="change"?"Energy consumed per interval":"Recorder statistics")+" in "+unit);
     const x=p=>50+620*(right===left?.5:(p-left)/(right-left));
     const y=v=>154-126*(v-lo)/(hi-lo);
     for(let n=0;n<4;n++){
@@ -353,16 +390,37 @@ class TowelDryersManagedPanel extends HTMLElement{
       text.textContent=(hi-(level-28)/126*(hi-lo)).toFixed(1);svg.append(text);
     }
     for(const s of graphs){
-      const path=document.createElementNS(doc,"polyline");
-      path.setAttribute("points",s.points.map(p=>x(p.x).toFixed(1)+","+y(p.y).toFixed(1)).join(" "));
-      path.setAttribute("fill","none");path.setAttribute("stroke",s.color);
-      path.setAttribute("stroke-width","2.5");path.setAttribute("stroke-linejoin","round");
-      path.setAttribute("stroke-linecap","round");svg.append(path);
-      if(s.points.length===1){
-        const circle=document.createElementNS(doc,"circle");
-        circle.setAttribute("cx",String(x(s.points[0].x)));
-        circle.setAttribute("cy",String(y(s.points[0].y)));
-        circle.setAttribute("r","4");circle.setAttribute("fill",s.color);svg.append(circle);
+      if(isEnergy){
+        const baseline=y(0);
+        const spacing=620/Math.max(1,s.points.length);
+        const barWidth=Math.max(1,Math.min(26,spacing*.8));
+        for(const p of s.points){
+          if(p.y===0)continue;
+          const top=Math.min(baseline,y(p.y));
+          const bar=document.createElementNS(doc,"rect");
+          for(const [k,v] of Object.entries({
+            x:(x(p.x)-barWidth/2).toFixed(1),y:top.toFixed(1),
+            width:barWidth.toFixed(1),
+            height:Math.max(1,Math.abs(y(p.y)-baseline)).toFixed(1),
+            fill:p.y<0?"var(--warning-color,#c27a30)":s.color
+          }))bar.setAttribute(k,String(v));
+          const tooltip=document.createElementNS(doc,"title");
+          tooltip.textContent=p.y.toLocaleString(undefined,{maximumFractionDigits:3})+
+            " kWh · "+new Date(p.x).toLocaleString();
+          bar.append(tooltip);svg.append(bar);
+        }
+      }else{
+        const path=document.createElementNS(doc,"polyline");
+        path.setAttribute("points",s.points.map(p=>x(p.x).toFixed(1)+","+y(p.y).toFixed(1)).join(" "));
+        path.setAttribute("fill","none");path.setAttribute("stroke",s.color);
+        path.setAttribute("stroke-width","2.5");path.setAttribute("stroke-linejoin","round");
+        path.setAttribute("stroke-linecap","round");svg.append(path);
+        if(s.points.length===1){
+          const circle=document.createElementNS(doc,"circle");
+          circle.setAttribute("cx",String(x(s.points[0].x)));
+          circle.setAttribute("cy",String(y(s.points[0].y)));
+          circle.setAttribute("r","4");circle.setAttribute("fill",s.color);svg.append(circle);
+        }
       }
     }
     for(const [t,anchor,at] of [[left,"start",50],[right,"end",670]]){
