@@ -10,3 +10,6 @@
 - Offline regression coverage added for Monday/Sunday/Saturday, automatic en-GB/en-US week starts, and user preference changes. Device schedules and historical recordings are not rewritten.
 
 The HACS release ZIP is validated against the same Home Assistant weekday regression tests before publication.
+
+## After updating
+- Install v2026.11.13 from HACS and restart Home Assistant to load the new versioned calendar assets.
