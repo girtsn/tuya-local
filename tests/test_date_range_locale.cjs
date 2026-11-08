@@ -7,7 +7,7 @@ const path=require("node:path");
 const file=path.resolve(__dirname,"../custom_components/tuya_local/www/towel-dryers-date-range-picker.js");
 const mocks={
   HTMLElement:class{
-    attachShadow(){return {addEventListener(){},replaceChildren(){}};}
+    attachShadow(){this.shadowRoot={addEventListener(){},replaceChildren(){}};return this.shadowRoot;}
     dispatchEvent(){}
     get isConnected(){return false;}
   },
