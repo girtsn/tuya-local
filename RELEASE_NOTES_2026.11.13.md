@@ -8,3 +8,5 @@
 
 ## Verification
 - Offline regression coverage added for Monday/Sunday/Saturday, automatic en-GB/en-US week starts, and user preference changes. Device schedules and historical recordings are not rewritten.
+
+The HACS release ZIP is validated against the same Home Assistant weekday regression tests before publication.
