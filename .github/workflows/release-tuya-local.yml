@@ -53,6 +53,8 @@ jobs:
           done
       - name: Test dashboard hot updates and schedule safeguards
         run: node tests/test_towel_dryers_frontend.cjs
+      - name: Test user-localized week selection
+        run: node tests/test_date_range_locale.cjs
       - name: Test interval electricity changes and totals
         run: node tests/test_towel_energy_deltas.cjs
       - name: Test interactive Recorder tooltip
