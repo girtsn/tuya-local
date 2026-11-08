@@ -54,7 +54,9 @@ class ViperaScheduleCard extends HTMLElement {
     if (this._hass) this._render();
   }
   set hass(value) {
+    const previousWeekStart = this._weekStart();
     this._hass = value;
+    const weekdayOrderChanged = previousWeekStart !== this._weekStart();
     if (!this._cfg) return;
     // The HA frontend may call this setter many times each second as unrelated
     // entities update. Never recreate an open radiator dropdown on every update.
@@ -63,7 +65,7 @@ class ViperaScheduleCard extends HTMLElement {
     if (!this._loaded && state) this._load(state);
     // Only changes to the three configured schedule entities need a new view.
     const signature = JSON.stringify(this._cfg.devices.map(d => this._getState(d)));
-    if (signature === this._scheduleSignature && wasLoaded === this._loaded) return;
+    if (signature === this._scheduleSignature && wasLoaded === this._loaded && !weekdayOrderChanged) return;
     this._scheduleSignature = signature;
     if (this.shadowRoot.activeElement?.tagName === 'SELECT') {
       // Let the user finish choosing a radiator before replacing its menu.
@@ -184,6 +186,17 @@ class ViperaScheduleCard extends HTMLElement {
     if(!Number.isInteger(val)||val!==255&&(val<31||val>60)) {alert('Enter 31–60°C or OFF. 30°C is reserved for inactive Schedule mode.');return;}
     this._edited[this._day*24+hour]=val;
     this._render();
+  }
+  _weekStart() {
+    const weekdays=['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+    const selected=weekdays.indexOf(this._hass?.locale?.first_weekday);
+    if(selected>=0)return selected;
+    const lang=this._hass?.locale?.language||this._hass?.language||'en-GB';
+    try{return new Intl.Locale(lang).weekInfo.firstDay%7;}
+    catch(_){return 1;}
+  }
+  _displayDayOrder() {
+    return Array.from({length:7},(_,i)=>(this._weekStart()+6+i)%7);
   }
   _dayName(i) { return ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'][i]; }
   _shortDayName(i) { return ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][i]; }
@@ -392,7 +405,7 @@ class ViperaScheduleCard extends HTMLElement {
     const grid=this._node('div',null,{class:'week'});
     const head=this._node('div','Hour', {class:'hourlabel'});grid.append(head);
     for(let h=0;h<24;h++)grid.append(this._node('div',String(h).padStart(2,'0'),{class:'hourlabel'}));
-    for(let d=0;d<7;d++){
+    for(const d of this._displayDayOrder()){
       const db=this._button(this._dayName(d).slice(0,3),()=>this._chooseDay(d));db.className='weekday';grid.append(db);
       for(let h=0;h<24;h++){
         const temp=this._edited[d*24+h];
@@ -457,7 +470,7 @@ class ViperaScheduleCard extends HTMLElement {
     panel.append(this._node('div','Copy within this dryer',{class:'section-title'}));
     const localRow=this._node('div',null,{class:'action-row'});
     localRow.append(this._node('span',`Copy ${this._shortDayName(this._day)} →`,{class:'prompt'}));
-    const localDay=this._select(Array.from({length:7},(_,d)=>({label:this._shortDayName(d),value:d})),
+    const localDay=this._select(this._displayDayOrder().map(d=>({label:this._shortDayName(d),value:d})),
       this._copyLocalDestDay,value=>{this._copyLocalDestDay=Number(value)});
     localDay.classList.add('day-select');localRow.append(localDay);
     localRow.append(this._button('Copy',()=>this._copyDay(Number(localDay.value)),{
@@ -486,7 +499,7 @@ class ViperaScheduleCard extends HTMLElement {
       const target=this._select(others.map(x=>({label:x.d.name,value:x.i})),this._copyDayTargetIndex,
         value=>{this._copyDayTargetIndex=Number(value)});
       dayRow.append(target);
-      const targetDay=this._select(Array.from({length:7},(_,d)=>({label:this._shortDayName(d),value:d})),
+      const targetDay=this._select(this._displayDayOrder().map(d=>({label:this._shortDayName(d),value:d})),
         this._copyDayTargetDay,value=>{this._copyDayTargetDay=Number(value)});
       targetDay.classList.add('day-select');dayRow.append(targetDay);
       dayRow.append(this._button('Copy',()=>{

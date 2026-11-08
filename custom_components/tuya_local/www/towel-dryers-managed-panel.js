@@ -25,6 +25,7 @@ class TowelDryersManagedPanel extends HTMLElement{
   }
   set hass(value){
     this._hass=value;
+    if(this._picker?.isConnected)this._picker.hass=value;
     if(!this.isConnected)return;
     if(!this._assetsReady){this._ensureAssets();this._render();return;}
     this._ensureRegistry();
@@ -207,6 +208,8 @@ class TowelDryersManagedPanel extends HTMLElement{
     filter.append(this._el("span","Shared history period","label"));
     const picker=this._el(TD_PICKER_TAG);
     picker.range=this._range;
+      picker.hass=this._hass;
+      this._picker=picker;
     picker.addEventListener("date-range-changed",event=>{
       this._range=event.detail;
       this._loadHistory();
