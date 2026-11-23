@@ -1,20 +1,44 @@
-/* Same date picker and presets as the tado X dashboard; scoped to Towel Dryers. */
-const twMidnight=date=>new Date(date.getFullYear(),date.getMonth(),date.getDate());
-const twAddDays=(date,n)=>{
-  const result=new Date(date.getFullYear(),date.getMonth(),date.getDate());
-  result.setDate(result.getDate()+n);
-  return result;
+/* Shared Energy-style calendar picker. Dates are HA-local calendar days,
+ * independent of the viewing browser's timezone (including DST transitions).
+ * Civil calendar arithmetic is performed on UTC-midnight surrogate Date objects.
+ */
+const twZone=hass=>hass?.config?.time_zone||"UTC";
+const twCivil=(instant,zone)=>{
+  const values=Object.fromEntries(new Intl.DateTimeFormat("en-GB",{
+    timeZone:zone,year:"numeric",month:"2-digit",day:"2-digit"
+  }).formatToParts(instant).filter(p=>p.type!=="literal").map(p=>[p.type,+p.value]));
+  return new Date(Date.UTC(values.year,values.month-1,values.day));
 };
-const twDaySpan=(a,b)=>Math.round(
-  (Date.UTC(b.getFullYear(),b.getMonth(),b.getDate())-
-   Date.UTC(a.getFullYear(),a.getMonth(),a.getDate()))/86400000
-);
-const twDateText=date=>date.toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"});
-// The HA profile setting takes precedence over the browser/device locale.
+const twToday=(hass,base=new Date())=>twCivil(base,twZone(hass));
+const twAddDays=(date,n)=>new Date(date.getTime()+n*86400000);
+const twDaySpan=(a,b)=>Math.round((b.getTime()-a.getTime())/86400000);
+const twFromUtc=(iso,hass)=>twCivil(new Date(iso),twZone(hass));
+const twToUtc=(civil,hass)=>{
+  const target=civil.getTime();
+  const formatter=new Intl.DateTimeFormat("en-GB",{
+    timeZone:twZone(hass),year:"numeric",month:"2-digit",day:"2-digit",
+    hour:"2-digit",minute:"2-digit",second:"2-digit",hourCycle:"h23"
+  });
+  let guess=target;
+  for(let i=0;i<4;i++){
+    const parts=Object.fromEntries(formatter.formatToParts(new Date(guess))
+      .filter(p=>p.type!=="literal").map(p=>[p.type,+p.value]));
+    const shown=Date.UTC(parts.year,parts.month-1,parts.day,
+      parts.hour,parts.minute,parts.second);
+    const correction=target-shown;
+    guess+=correction;
+    if(correction===0)break;
+  }
+  return new Date(guess).toISOString();
+};
+const twDateText=(date,hass)=>new Intl.DateTimeFormat(
+  hass?.locale?.language||hass?.language||undefined,
+  {timeZone:"UTC",month:"short",day:"numeric",year:"numeric"}
+).format(date);
 const twFirstWeekday=hass=>{
-  const explicit=["sunday","monday","tuesday","wednesday","thursday","friday","saturday"]
+  const first=["sunday","monday","tuesday","wednesday","thursday","friday","saturday"]
     .indexOf(hass?.locale?.first_weekday);
-  if(explicit>=0)return explicit;
+  if(first>=0)return first;
   const language=hass?.locale?.language||hass?.language||
     (typeof navigator!=="undefined"?navigator.language:"en-GB");
   try{
@@ -23,47 +47,46 @@ const twFirstWeekday=hass=>{
   }catch(_){return 1;}
 };
 const twPresetRange=(preset,base=new Date(),hass=null)=>{
-  const now=twMidnight(base),tomorrow=twAddDays(now,1);
-  const weekOffset=(now.getDay()-twFirstWeekday(hass)+7)%7;
+  const now=twToday(hass,base),tomorrow=twAddDays(now,1);
   let start,end=tomorrow;
+  const offset=(now.getUTCDay()-twFirstWeekday(hass)+7)%7;
   switch(preset){
-    case "last24":
-      return {start:new Date(base.getTime()-86400000).toISOString(),
-        end:base.toISOString(),preset};
+    case "last24":return {start:new Date(base.getTime()-86400000).toISOString(),
+      end:base.toISOString(),preset};
     case "today":start=now;break;
     case "yesterday":start=twAddDays(now,-1);end=now;break;
-    case "week":start=twAddDays(now,-weekOffset);break;
-    case "month":start=new Date(now.getFullYear(),now.getMonth(),1);break;
-    case "quarter":start=new Date(now.getFullYear(),Math.floor(now.getMonth()/3)*3,1);break;
-    case "year":start=new Date(now.getFullYear(),0,1);break;
+    case "week":start=twAddDays(now,-offset);break;
+    case "month":start=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),1));break;
+    case "quarter":start=new Date(Date.UTC(now.getUTCFullYear(),Math.floor(now.getUTCMonth()/3)*3,1));break;
+    case "year":start=new Date(Date.UTC(now.getUTCFullYear(),0,1));break;
     case "last7":start=twAddDays(now,-6);break;
     case "last30":start=twAddDays(now,-29);break;
     case "last365":start=twAddDays(now,-364);break;
-    case "last12months":start=new Date(now.getFullYear(),now.getMonth()-11,1);break;
-    case "last3years":start=twAddDays(new Date(now.getFullYear()-3,now.getMonth(),now.getDate()),1);break;
+    case "last12months":start=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth()-11,1));break;
+    case "last3years":start=twAddDays(new Date(Date.UTC(now.getUTCFullYear()-3,now.getUTCMonth(),now.getUTCDate())),1);break;
     default:start=twAddDays(now,-6);preset="last7";
   }
-  return {start:start.toISOString(),end:end.toISOString(),preset};
+  return {start:twToUtc(start,hass),end:twToUtc(end,hass),preset};
 };
 
-/* Energy-dashboard-style date selector, shared by all historic cards.
- * Dates use local midnights; end is exclusive to avoid DST / partial-day bugs.
- */
 class TowelDryersDateRangePicker extends HTMLElement {
   constructor(){
     super();this.attachShadow({mode:"open"});
     this._hass=null;this._range=twPresetRange("week");this._open=false;
-    this._month=twMidnight(new Date());
-    this._draftStart=null;this._draftEnd=null;
+    this._month=twToday(null);this._draftStart=null;this._draftEnd=null;this._draftClicks=0;
   }
   set hass(value){
     const previous=this._hass;
     this._hass=value;
-    if(previous && this._range?.preset==="week" &&
-       twFirstWeekday(previous)!==twFirstWeekday(value)){
-      const r=twPresetRange("week",new Date(),value);
-      this._apply(new Date(r.start),new Date(r.end),"week");
-    }else this._render();
+    if((!previous||twZone(previous)!==twZone(value)||
+      twFirstWeekday(previous)!==twFirstWeekday(value))&&this._range?.preset==="week"){
+      this._range=twPresetRange("week",new Date(),value);
+      this._month=twToday(value);
+      this.dispatchEvent(new CustomEvent("date-range-changed",{
+        detail:this._range,bubbles:true,composed:true
+      }));
+    }
+    this._render();
   }
   set range(value){if(value){this._range=value;this._render();}}
   get range(){return this._range;}
@@ -75,63 +98,72 @@ class TowelDryersDateRangePicker extends HTMLElement {
     return e;
   }
   _btn(label,handler,cls,disabled=false){
-    const el=this._el("button",label,cls);el.type="button";el.disabled=disabled;
-    el.addEventListener("click",handler);return el;
+    const e=this._el("button",label,cls);e.type="button";e.disabled=disabled;
+    e.addEventListener("click",handler);return e;
   }
   _limits(start,end){
-    const today=twAddDays(twMidnight(new Date()),1);
-    return start<end && end<=today && twDaySpan(start,end)<=1099;
+    return start<end&&end<=twAddDays(twToday(this._hass),1)&&twDaySpan(start,end)<=1099;
+  }
+  _publish(range){
+    this._range=range;this._open=false;
+    this._draftStart=null;this._draftEnd=null;this._draftClicks=0;
+    this._render();
+    this.dispatchEvent(new CustomEvent("date-range-changed",{
+      detail:range,bubbles:true,composed:true
+    }));
   }
   _apply(start,end,preset="custom"){
     if(!this._limits(start,end))return;
-    this._range={start:start.toISOString(),end:end.toISOString(),preset};
-    this._open=false;this._draftStart=null;this._draftEnd=null;
-    this._render();
-    this.dispatchEvent(new CustomEvent("date-range-changed",{
-      detail:this._range,bubbles:true,composed:true
-    }));
+    this._publish({start:twToUtc(start,this._hass),end:twToUtc(end,this._hass),preset});
   }
+  _usePreset(preset){this._publish(twPresetRange(preset,new Date(),this._hass));}
   _shift(direction){
-    const start=new Date(this._range.start);
-    const end=new Date(this._range.end);
     const preset=this._range.preset;
+    if(preset==="last24"){
+      const delta=direction*86400000;
+      const start=new Date(new Date(this._range.start).getTime()+delta);
+      const end=new Date(new Date(this._range.end).getTime()+delta);
+      if(end<=new Date())this._publish({start:start.toISOString(),end:end.toISOString(),preset});
+      return;
+    }
+    const start=twFromUtc(this._range.start,this._hass);
+    const end=twFromUtc(this._range.end,this._hass);
     let nextStart,nextEnd;
     const months=({month:1,quarter:3,year:12})[preset];
-    if(preset==="last24"){
-      nextStart=new Date(start.getTime()+direction*86400000);
-      nextEnd=new Date(end.getTime()+direction*86400000);
-    }else if(months){
-      nextStart=new Date(start.getFullYear(),start.getMonth()+months*direction,1);
-      nextEnd=new Date(start.getFullYear(),start.getMonth()+months*(direction+1),1);
-      const tomorrow=twAddDays(twMidnight(new Date()),1);
+    if(months){
+      nextStart=new Date(Date.UTC(start.getUTCFullYear(),start.getUTCMonth()+months*direction,1));
+      nextEnd=new Date(Date.UTC(start.getUTCFullYear(),start.getUTCMonth()+months*(direction+1),1));
+      const tomorrow=twAddDays(twToday(this._hass),1);
       if(nextEnd>tomorrow)nextEnd=tomorrow;
     }else if(preset==="last12months"||preset==="last3years"){
       const monthsBack=preset==="last3years"?36:12;
-      nextStart=new Date(start.getFullYear(),start.getMonth()+monthsBack*direction,start.getDate());
-      nextEnd=new Date(start.getFullYear(),start.getMonth()+monthsBack*(direction+1),start.getDate());
-      const tomorrow=twAddDays(twMidnight(new Date()),1);
+      nextStart=new Date(Date.UTC(start.getUTCFullYear(),start.getUTCMonth()+monthsBack*direction,start.getUTCDate()));
+      nextEnd=new Date(Date.UTC(start.getUTCFullYear(),start.getUTCMonth()+monthsBack*(direction+1),start.getUTCDate()));
+      const tomorrow=twAddDays(twToday(this._hass),1);
       if(nextEnd>tomorrow)nextEnd=tomorrow;
     }else{
-      const diff=twDaySpan(start,end);
-      nextStart=twAddDays(start,diff*direction);
-      nextEnd=twAddDays(end,diff*direction);
+      const days=twDaySpan(start,end);
+      nextStart=twAddDays(start,days*direction);
+      nextEnd=twAddDays(end,days*direction);
     }
     if(this._limits(nextStart,nextEnd))this._apply(nextStart,nextEnd,preset);
   }
   _dayClick(date){
-    if(!this._draftStart||this._draftEnd){
-      this._draftStart=date;this._draftEnd=null;
-    }else if(date<this._draftStart){
-      this._draftEnd=twAddDays(this._draftStart,1);
-      this._draftStart=date;
-    }else this._draftEnd=twAddDays(date,1);
+    if(!this._draftStart||this._draftClicks>=2){
+      this._draftStart=date;this._draftEnd=twAddDays(date,1);this._draftClicks=1;
+    }else{
+      if(date<this._draftStart){
+        this._draftEnd=twAddDays(this._draftStart,1);this._draftStart=date;
+      }else this._draftEnd=twAddDays(date,1);
+      this._draftClicks=2;
+    }
     this._render();
   }
   _render(){
     if(!this.isConnected)return;
     const root=this.shadowRoot;root.replaceChildren();
     const style=this._el("style");
-    style.textContent=[
+style.textContent=[
       ":host{display:block;color:var(--primary-text-color);font:inherit;position:relative;z-index:5}",
       "*{box-sizing:border-box}",
       ".toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}",
@@ -155,68 +187,89 @@ class TowelDryersDateRangePicker extends HTMLElement {
       ".footer{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}",
       ".choose{background:var(--primary-color,#039bc6);color:var(--text-primary-color,#fff)}",
       "@media(max-width:570px){.popup{grid-template-columns:minmax(0,1fr);width:min(360px,calc(100vw - 30px))}.presets{display:grid;grid-template-columns:1fr 1fr;max-height:140px;border-right:0;border-bottom:1px solid var(--divider-color,#ddd)}.preset{padding:7px 8px}}"
-    ].join("\n");root.append(style);
-    const start=this._range.preset==="last24"?new Date(this._range.start):twMidnight(new Date(this._range.start));
-    const end=this._range.preset==="last24"?new Date(this._range.end):twMidnight(new Date(this._range.end));
+    ].join("\n");
+    root.append(style);
+    const start=twFromUtc(this._range.start,this._hass);
+    const end=twFromUtc(this._range.end,this._hass);
     const bar=this._el("div",null,"toolbar");
-    const label=this._range.preset==="last24"?
-      start.toLocaleString(undefined,{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"})+
-      " – "+end.toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"}):
-      twDateText(start)+" – "+twDateText(twAddDays(end,-1));
-    bar.append(this._btn("▣  "+label,()=>{this._open=!this._open;this._render();},"label"));
-    bar.append(this._btn("Now",()=>{const r=twPresetRange(this._range.preset==="custom"?"week":this._range.preset,new Date(),this._hass);this._apply(new Date(r.start),new Date(r.end),r.preset);},"now"));
+    const label=twDateText(start,this._hass)+" – "+twDateText(twAddDays(end,-1),this._hass);
+    bar.append(this._btn("▣  "+label,()=>{
+      this._open=!this._open;
+      if(this._open)this._month=twFromUtc(this._range.start,this._hass);
+      this._render();
+    },"label"));
+    bar.append(this._btn("Now",()=>this._usePreset(
+      this._range.preset==="custom"?"week":this._range.preset
+    ),"now"));
     bar.append(this._btn("‹",()=>this._shift(-1),"chevron"));
-    bar.append(this._btn("›",()=>this._shift(1),"chevron",end>=twAddDays(twMidnight(new Date()),1)));
+    bar.append(this._btn("›",()=>this._shift(1),"chevron",
+      this._range.preset==="last24"?new Date(this._range.end)>=new Date():
+      end>=twAddDays(twToday(this._hass),1)));
     root.append(bar);
     if(!this._open)return;
     const popup=this._el("div",null,"popup");
     const presets=this._el("div",null,"presets");
     for(const [key,title] of [
-      ["last24","Last 24 hours"],["today","Today"],["yesterday","Yesterday"],["week","This week"],
+      ["last24","Last 24 hours"],
+      ["today","Today"],["yesterday","Yesterday"],["week","This week"],
       ["month","This month"],["quarter","This quarter"],["year","This year"],
       ["last7","Last 7 days"],["last30","Last 30 days"],
       ["last365","Last 365 days"],["last12months","Last 12 months"],
       ["last3years","Last 3 years"]
     ]){
-      presets.append(this._btn(title,()=>{
-        const r=twPresetRange(key,new Date(),this._hass);this._apply(new Date(r.start),new Date(r.end),key);
-      },"preset"+(this._range.preset===key?" selected":"")));
+      presets.append(this._btn(title,()=>this._usePreset(key),
+        "preset"+(this._range.preset===key?" selected":"")));
     }
     popup.append(presets);
     const right=this._el("div",null,"right");
     const head=this._el("div",null,"month-head");
-    head.append(this._btn("‹",()=>{this._month=new Date(this._month.getFullYear(),this._month.getMonth()-1,1);this._render();},"chevron"));
-    head.append(this._el("span",this._month.toLocaleDateString(undefined,{month:"long",year:"numeric"})));
-    head.append(this._btn("›",()=>{this._month=new Date(this._month.getFullYear(),this._month.getMonth()+1,1);this._render();},"chevron"));
+    head.append(this._btn("‹",()=>{
+      this._month=new Date(Date.UTC(this._month.getUTCFullYear(),this._month.getUTCMonth()-1,1));
+      this._render();
+    },"chevron"));
+    head.append(this._el("span",this._month.toLocaleDateString(undefined,{
+      month:"long",year:"numeric",timeZone:"UTC"
+    })));
+    head.append(this._btn("›",()=>{
+      this._month=new Date(Date.UTC(this._month.getUTCFullYear(),this._month.getUTCMonth()+1,1));
+      this._render();
+    },"chevron"));
     right.append(head);
+    const hint=this._el("div","Tap one date for a day, or two dates for a range.","muted");
+    hint.style.cssText="font-size:12px;color:var(--secondary-text-color,#888);margin-bottom:6px";
+    right.append(hint);
     const cal=this._el("div",null,"calendar");
     const first=twFirstWeekday(this._hass);
     for(let i=0;i<7;i++){
-      const d=new Date(2026,10,1+((first+i)%7));
-      cal.append(this._el("span",d.toLocaleDateString(undefined,{weekday:"narrow"}),"weekday"));
+      const d=new Date(Date.UTC(2026,10,1+((first+i)%7)));
+      cal.append(this._el("span",d.toLocaleDateString(undefined,{
+        weekday:"narrow",timeZone:"UTC"
+      }),"weekday"));
     }
-    const monthStart=new Date(this._month.getFullYear(),this._month.getMonth(),1);
-    const offset=(monthStart.getDay()-first+7)%7;
-    const draftStart=this._draftStart||start,draftEnd=this._draftEnd||(!this._draftStart?end:null);
+    const monthStart=new Date(Date.UTC(this._month.getUTCFullYear(),this._month.getUTCMonth(),1));
+    const offset=(monthStart.getUTCDay()-first+7)%7;
+    const draftStart=this._draftStart||start;
+    const draftEnd=this._draftEnd||end;
     for(let i=0;i<42;i++){
       const date=twAddDays(monthStart,i-offset);
-      const future=date>twMidnight(new Date());
-      const inRange=draftEnd ? date>=draftStart&&date<draftEnd :
-        this._draftStart&&twDaySpan(date,draftStart)===0;
-      const cls="day"+(date.getMonth()!==this._month.getMonth()?" outside":"")+
-        (inRange?" inrange":"")+(twDaySpan(date,twMidnight(new Date()))===0?" today":"");
-      cal.append(this._btn(String(date.getDate()),()=>this._dayClick(date),cls,future));
+      const future=date>twToday(this._hass);
+      const inRange=date>=draftStart&&date<draftEnd;
+      const cls="day"+(date.getUTCMonth()!==this._month.getUTCMonth()?" outside":"")+
+        (inRange?" inrange":"")+(twDaySpan(date,twToday(this._hass))===0?" today":"");
+      cal.append(this._btn(String(date.getUTCDate()),()=>this._dayClick(date),cls,future));
     }
     right.append(cal);
     const footer=this._el("div",null,"footer");
-    footer.append(this._btn("Cancel",()=>{this._open=false;this._draftStart=null;this._draftEnd=null;this._render();}));
+    footer.append(this._btn("Cancel",()=>{
+      this._open=false;this._draftStart=null;this._draftEnd=null;this._draftClicks=0;this._render();
+    }));
     footer.append(this._btn("Select",()=>{
-      const a=this._draftStart||start,b=this._draftEnd||(!this._draftStart?end:null);
-      if(b)this._apply(a,b,"custom");
-    },"choose",Boolean(this._draftStart&&!this._draftEnd)));
+      this._apply(this._draftStart||start,this._draftEnd||end,"custom");
+    },"choose"));
     right.append(footer);popup.append(right);root.append(popup);
   }
 }
+
 // Preserve the legacy element while giving each managed-panel version its own
 // class. Otherwise the browser can reuse an older picker after a hot update.
 if(!customElements.get("towel-dryers-date-range-picker"))
