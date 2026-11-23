@@ -8,6 +8,7 @@ const TD_TAG="towel-dryers-managed-v"+TD_VERSION.replace(/\./g,"-");
 const TD_PICKER_TAG="towel-dryers-date-range-picker-v"+TD_VERSION.replace(/\./g,"-");
 const TD_SCHEDULE_TAG="vipera-schedule-card-v"+TD_VERSION.replace(/\./g,"-");
 let tdPresetRange=null;
+let tdZone=h=>h?.config?.time_zone||"UTC";
 class TowelDryersManagedPanel extends HTMLElement{
   constructor(){
     super();
@@ -74,8 +75,9 @@ class TowelDryersManagedPanel extends HTMLElement{
         !customElements.get(TD_PICKER_TAG))
         throw Error("Versioned Towel Dryers dashboard modules were not registered");
       tdPresetRange=picker.twPresetRange;
+      tdZone=picker.twZone;
       if(typeof tdPresetRange!=="function")throw Error("Date picker not available");
-      this._range??=tdPresetRange("last7");
+      this._range??=tdPresetRange("last7",new Date(),this._hass);
       this._assetsReady=true;
     })().catch(e=>{
       this._assetError=e?.message||String(e);
@@ -359,17 +361,23 @@ class TowelDryersManagedPanel extends HTMLElement{
     if(!Number.isFinite(start.getTime())||!Number.isFinite(end.getTime()))return [];
     if(end-start>35*86400000)return [];
     const days=new Map();
+    // Bucket diagnostics by the same civil calendar days as the picker,
+    // not the browser's timezone when the HA profile requests server time.
+    const formatter=new Intl.DateTimeFormat("en-GB",{
+      timeZone:tdZone(this._hass),year:"numeric",month:"2-digit",day:"2-digit"
+    });
     const keyAt=ms=>{
-      const d=new Date(ms);
-      const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0");
-      return y+"-"+m+"-"+String(d.getDate()).padStart(2,"0");
+      const p=Object.fromEntries(formatter.formatToParts(new Date(ms))
+        .filter(v=>v.type!=="literal").map(v=>[v.type,v.value]));
+      return p.year+"-"+p.month+"-"+p.day;
     };
-    // This table is for short-term diagnostic ranges. Avoid hundreds of
-    // empty rows when the picker is on a multi-year view.
+    // UTC surrogate calendar-day increments remain DST-safe.
     const maxDays=35;
-    const date=new Date(start.getFullYear(),start.getMonth(),start.getDate());
-    for(let n=0;n<maxDays&&date<end;n++,date.setDate(date.getDate()+1)){
-      const key=keyAt(date.getTime());
+    const date=new Date(keyAt(start.getTime())+"T00:00:00Z");
+    const lastKey=keyAt(Math.max(start.getTime(),end.getTime()-1));
+    for(let n=0;n<maxDays&&date.toISOString().slice(0,10)<=lastKey;
+        n++,date.setUTCDate(date.getUTCDate()+1)){
+      const key=date.toISOString().slice(0,10);
       days.set(key,{day:key,recorder:null,statBuckets:0,
         raw:null,rawChanges:0,resets:0,corrections:0,
         firstPositiveStat:null,firstPositiveRaw:null});
@@ -697,8 +705,10 @@ class TowelDryersManagedPanel extends HTMLElement{
           }))bar.setAttribute(k,String(v));
           const tooltip=document.createElementNS(doc,"title");
           tooltip.textContent=p.y.toLocaleString(undefined,{maximumFractionDigits:3})+
-            " kWh"+(p.from!=null?" from "+new Date(p.from).toLocaleString():"")+
-            " to "+new Date(p.x).toLocaleString();
+            " kWh"+(p.from!=null?" from "+new Date(p.from).toLocaleString(
+              this._hass?.locale?.language||undefined,{timeZone:tdZone(this._hass)}):"")+
+            " to "+new Date(p.x).toLocaleString(
+              this._hass?.locale?.language||undefined,{timeZone:tdZone(this._hass)});
           bar.append(tooltip);svg.append(bar);
         }
       }else{
@@ -720,7 +730,8 @@ class TowelDryersManagedPanel extends HTMLElement{
       label.setAttribute("x",String(at));label.setAttribute("y","182");
       label.setAttribute("text-anchor",anchor);label.setAttribute("font-size","12");
       label.setAttribute("fill","var(--secondary-text-color,#777)");
-      label.textContent=new Date(t).toLocaleDateString();svg.append(label);
+      label.textContent=new Date(t).toLocaleDateString(
+        this._hass?.locale?.language||undefined,{timeZone:tdZone(this._hass)});svg.append(label);
     }
     host.append(svg);
     attachRecorderChartTooltip(host,svg,

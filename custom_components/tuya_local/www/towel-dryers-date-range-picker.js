@@ -1,8 +1,12 @@
-/* Shared Energy-style calendar picker. Dates are HA-local calendar days,
- * independent of the viewing browser's timezone (including DST transitions).
- * Civil calendar arithmetic is performed on UTC-midnight surrogate Date objects.
+/* Shared Energy-style calendar picker. Honor HA user-profile time zone:
+ * "local" = this viewing device; "server" = HA configured location.
+ * UTC-midnight surrogate civil dates preserve correct 23/25h DST boundaries.
  */
-const twZone=hass=>hass?.config?.time_zone||"UTC";
+const twZone=hass=>{
+  const server=hass?.config?.time_zone||"UTC";
+  if(hass?.locale?.time_zone!=="local")return server;
+  return Intl.DateTimeFormat().resolvedOptions().timeZone||server;
+};
 const twCivil=(instant,zone)=>{
   const values=Object.fromEntries(new Intl.DateTimeFormat("en-GB",{
     timeZone:zone,year:"numeric",month:"2-digit",day:"2-digit"
@@ -78,8 +82,20 @@ class TowelDryersDateRangePicker extends HTMLElement {
   set hass(value){
     const previous=this._hass;
     this._hass=value;
-    if((!previous||twZone(previous)!==twZone(value)||
-      twFirstWeekday(previous)!==twFirstWeekday(value))&&this._range?.preset==="week"){
+    const zoneChanged=previous&&twZone(previous)!==twZone(value);
+    if(zoneChanged&&this._range?.preset!=="last24"){
+      // Preserve the chosen *calendar dates* when a user switches between
+      // local/server time. Recompute the UTC instants for the new zone.
+      const start=twCivil(new Date(this._range.start),twZone(previous));
+      const end=twCivil(new Date(this._range.end),twZone(previous));
+      this._range={...this._range,
+        start:twToUtc(start,value),end:twToUtc(end,value)};
+      this._month=twToday(value);
+      this.dispatchEvent(new CustomEvent("date-range-changed",{
+        detail:this._range,bubbles:true,composed:true
+      }));
+    }else if((!previous||twFirstWeekday(previous)!==twFirstWeekday(value))
+      &&this._range?.preset==="week"){
       this._range=twPresetRange("week",new Date(),value);
       this._month=twToday(value);
       this.dispatchEvent(new CustomEvent("date-range-changed",{
@@ -279,4 +295,4 @@ const TW_PICKER_TAG="towel-dryers-date-range-picker-v"+TW_PICKER_VERSION;
 if(!customElements.get(TW_PICKER_TAG))
   customElements.define(TW_PICKER_TAG,class extends TowelDryersDateRangePicker {});
 
-export { twPresetRange };
+export { twPresetRange, twZone };
