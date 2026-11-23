@@ -135,7 +135,7 @@ def test_towel_dryers_overview_has_shared_charts_and_two_tabs():
         / "www"
         / "towel-dryers-managed-panel.js"
     ).read_text()
-    assert 'tdPresetRange("last7")' in panel
+    assert 'tdPresetRange("last7",new Date(),this._hass)' in panel
     assert '[["Overview","overview"],["Schedules","schedules"]]' in panel
     assert '["History","history"]' not in panel
     assert 'picker.addEventListener("date-range-changed"' in panel
