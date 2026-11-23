@@ -75,7 +75,7 @@ class TowelDryersManagedPanel extends HTMLElement{
         throw Error("Versioned Towel Dryers dashboard modules were not registered");
       tdPresetRange=picker.twPresetRange;
       if(typeof tdPresetRange!=="function")throw Error("Date picker not available");
-      this._range??=tdPresetRange("last7");
+      this._range??=tdPresetRange("last7",new Date(),this._hass);
       this._assetsReady=true;
     })().catch(e=>{
       this._assetError=e?.message||String(e);
